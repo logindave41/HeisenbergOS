@@ -6,9 +6,7 @@
 ;
 bits 16
 
-%define _BOOTSEG  0x07c0
-%define _MBRSEG   0x0060
-%define _STKSEG   0x9000
+%include "definitions.inc"
 
 ;----------------------------
 ; Quando a BIOS carrega a MBR ela o coloca no endereço 0x0000:0x7c00.
@@ -37,6 +35,7 @@ sector                  db  1     ; valor default, preenchido depois.
 
 num_sectors_after_mbr:  db  1 + ((_end - loader) / 512)   ; *** Isto está correto? ***
 loading_str:            db  "Loading Heisenberg OS...",13,10,0
+disk_read_error_str:    db  "Error reading loader. System halted!", 13, 10, 0
 
 boot_start:
   mov   ax,cs
@@ -80,7 +79,32 @@ mbr_real_start:
   call  puts
 
   ; Usa a BIOS para carregar o loader...
-  ;*** continua aqui ***
+  mov   ax,ds
+  mov   es,ax
+  mov   bx,loader
+  call  chs_cylinder_sector_encode
+  mov   al,[num_sectors_after_mbr]
+  mov   dh,[head]
+  int   0x13
+  jnc   disk_read_ok
+
+  ; Se chegou aqui, teve erro de leitura...
+error_loading_loader:
+  mov   si,disk_read_error_str
+  call  puts
+
+  ; Pára tudo e deixa parado (mesmo se ouver uma interrupção!).
+.halt:
+  cli
+  hlt
+  jmp   .halt  
+
+disk_read_ok:
+  mov   si,loader
+  mov   cx,loader_crc - loader
+  call  calc_crc
+  and   ax,[loader_crc]
+  jnz   error_loading_loader
 
   jmp   loader
 
@@ -102,7 +126,7 @@ puts:
 ;----------------------------
 ; Rotina auxiliar em modo real. Calcula o CRC de um bloco.
 ; Retorna o complemento do CRC para facilitar a comparação, mais tarde.
-; Se fizermos um XOR entre o valor retornado por essa função e o valor
+; Se fizermos um AND entre o valor retornado por essa função e o valor
 ; que estará contido em "loader_crc", abaixo, o valor deve ser 0.
 ;
 ; Entrada: DS:SI endereço inicial do bloco.
@@ -136,6 +160,23 @@ calc_crc:
   ret
 
 ;----------------------------
+; Rotina auxiliar: Monta, em CX o par cilindro/sector, como
+; exigido pela INT 0x13/AH=2:
+; Entrada: <nenhuma>
+; Saída: CX
+; Destrói AL.
+;----------------------------
+chs_cylinder_sector_encode:
+  mov   cx,[cylinder]
+  and   cx,0x3ff          ; Zera bits superiores de CX.
+  rol   cx,8              ; CL contém parte superior e CH a inferior.
+  rol   cl,6              ; Coloca os 2 bits superiores do cilindro na parte superior de CL.
+  mov   al,[sector]
+  and   al,0x1f           ; Zera a parte superior do setor.
+  or    cl,al             ; mistura CL com AL.
+  ret
+
+;----------------------------
 ; O setor de boot tem que sempre termiar com os bytes 0x55 e 0xAA
 ; senão a BIOS não carregarã esse setor.
 ;
@@ -153,7 +194,11 @@ magic:
 ;--------------------
 
 loader:         ; Início do loader.
-;*** O código entra aqui ***
+
+; Coloquei o loader num arquivo separado porque:
+; 1. Um pequeno pedaço é em modo real e...
+; 2. Um outro pedaço é em modo protegido.
+%include "loader.asm"
 
 loader_crc:     dw    0     ; Apenas um checksum para determinar se
                             ; o código do MBR conseguiu ler todos os setores
