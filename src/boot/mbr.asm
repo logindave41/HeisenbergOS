@@ -1,4 +1,9 @@
 ; mbr.asm
+;
+; Embora eu tenha chamado esse arquivo de mbr.asm, ele não implementa a MBR.
+; Preferi usar um boot manager como o GRUB para "bootar" a partição correta.
+; Essa listagem implementa o loader do kernel.
+;
 bits 16
 
 %define _BOOTSEG  0x07c0
@@ -15,12 +20,13 @@ bits 16
 ; é mais fácil "normalizar" o endereço do boot para 0x07c0:0... É isso
 ; que o "far jump" abaixo faz.
 ;-----------------------------
-_mbr_start:
+_start:
   jmp   _BOOTSEG:boot_start
 
 ;-----------------------------
 ; Região de dados
 ;-----------------------------
+num_sectors_after_mbr:  db  1 + ((_end - loader) / 512)   ; *** Isto está correto? ***
 loading_str:    db    "Loading Heisenberg OS...",13,10,0
 
 boot_start:
@@ -37,14 +43,16 @@ boot_start:
   sti                 ; habilita interrupções.
 
 ;----------------------------
-; MBR é apenas um "pré-boot". Ele carregará o boot do sistema
-; operacional (apenas 1 setor) que, por sua vez, carregará setores
-; adicionais (que lidarão com o sistema de arquivos usados no SO).
-; Aqui, lidamos apenas com a MBR... Que existe apenas em HDs.
+; MBR é apenas um "pré-boot". A BIOS carrega apenas esse setor
+; que, por sua vez, carregará setores adicionais (que lidarão 
+; com o sistema de arquivos usados no SO).
 ;
 ; Assim, copiamos todo o setor para uma região mais baixa da memória
 ; para carregarmos o setor de boot na mesma posição onde este código se encontra.
 ; Escolhi o endereço físico 0x00600 (0x0060:0x0000) para isso.
+;
+; Note que todo esse código não pode ultrapassar uns 8 kB se você pretende
+; que ele funcione num diskete de 1.44 MB (18 setores por trilha).
 ;----------------------------
   cld
   mov   ax,_MBRSEG
@@ -62,8 +70,10 @@ mbr_real_start:
   mov   si,loading_str
   call  puts
 
-  ;--- continua aqui ---
-  hlt
+  ; Usa a BIOS para carregar o loader...
+  ;*** continua aqui ***
+
+  jmp   loader
 
 ;----------------------------
 ; Rotina auxiliar em modo real, usando a BIOS.
@@ -81,9 +91,40 @@ puts:
   ret
   
 ;----------------------------
-; OBS: Temos que ter um espaço aqui para a
-;      tabela de partição!
+; Rotina auxiliar em modo real. Calcula o CRC de um bloco.
+; Retorna o complemento do CRC para facilitar a comparação, mais tarde.
+; Se fizermos um XOR entre o valor retornado por essa função e o valor
+; que estará contido em "loader_crc", abaixo, o valor deve ser 0.
+;
+; Entrada: DS:SI endereço inicial do bloco.
+;          CX tamanho do bloco em bytes.
+; Saída:   AX crc.
+;
+; Rotina equivalente em C (desconsiderando os carry-outs):
+;
+;   short calc_crc(char *buffer, size_t size)
+;   {
+;      short sum = 0;
+;      while (size--)
+;        sum += *buffer++;
+;      return ~sum;
+;   }
 ;----------------------------
+calc_crc:
+  xor   ax,ax
+  xor   dx,dx
+.calc_crc_loop:
+  cmp   cx,0
+  jbe   .calc_crc_end
+  lodsb
+  add   dx,ax
+  adc   dx,0
+  inc   si
+  dec   cx
+  jmp   .calc_crc_loop  
+.calc_crc_end:
+  not   ax
+  ret
 
 ;----------------------------
 ; O setor de boot tem que sempre termiar com os bytes 0x55 e 0xAA
@@ -97,3 +138,16 @@ puts:
   times 510 - ($ - $$) db 0
 magic:
   db  0x55, 0xaa
+;--------------------
+; O codigo e dados contidos no restante dessa listagem pertencem aos
+; setores adjacentes ao MBR...
+;--------------------
+
+loader:         ; Início do loader.
+;*** O código entra aqui ***
+
+loader_crc:     dw    0     ; Apenas um checksum para determinar se
+                            ; o código do MBR conseguiu ler todos os setores
+                            ; corretamente. Vai ser preenchido por um utilitário
+                            ; externo depois...
+_end:           ; Fim do loader.
