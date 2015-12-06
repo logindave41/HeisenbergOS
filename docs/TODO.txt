@@ -1,0 +1,4 @@
+Atividades pendentes:
+
+1. Estrutura do projeto
+2. Estrutura do processo de boot
