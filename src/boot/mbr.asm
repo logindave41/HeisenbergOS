@@ -26,8 +26,17 @@ _start:
 ;-----------------------------
 ; Região de dados
 ;-----------------------------
+
+                        ; Temos essa assinatura aqui porque alguns valores serão preenchidos
+                        ; por um utilitário externo. Precisamos dela para localizar esses valores no
+                        ; arquivo binário...
+                        dd  0x0B16B00B5   ; Ahhh "peitões"! :)
+cylinder:               dw  0     ; valor default, preenchido depois.
+head:                   db  0     ; valor default, preenchido depois.
+sector                  db  1     ; valor default, preenchido depois.
+
 num_sectors_after_mbr:  db  1 + ((_end - loader) / 512)   ; *** Isto está correto? ***
-loading_str:    db    "Loading Heisenberg OS...",13,10,0
+loading_str:            db  "Loading Heisenberg OS...",13,10,0
 
 boot_start:
   mov   ax,cs
