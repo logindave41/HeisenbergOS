@@ -16,10 +16,12 @@ enableA20:
   int 0x15
   jnc testA20
 
-  ; Se não conseguiu, tenta usar o método "fast".
+  ; Se não conseguiu tenta usar o modo "fast".
   in  al,0x92
   or  al,2
   out 0x92,al
+
+  ;*** É preciso tentar habilitar usando o Keyboard Controller?!
 
 ;--------------------------
 ; Testa se o gateA20 foi habilitado.
@@ -34,6 +36,7 @@ testA20:
 
   ; Com gateA20 desligado, 0x0000:0x0510 e 0xFFFF:0x0520 
   ; apontam para o mesmo lugar!
+  ; PS: 0x510 localiza-se numa área de dados da BIOS "inútil".
   mov   si,0x510
   mov   di,0x520
 
