@@ -1,4 +1,4 @@
-test: test.o crc.o
+test: test.o cksum.o
 	gcc -o $@ $^
 
 %.o: %.c

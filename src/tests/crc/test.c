@@ -2,25 +2,34 @@
 #include <stdlib.h>
 #include <string.h>
 
-char buffer[8192];
+#define BUFFER_SIZE   8192
 
-extern short crc_asm(char *, size_t);
+char buffer[BUFFER_SIZE];
 
-short crc(char *p, size_t size)
+extern short cksum_asm(char *, size_t);
+
+short cksum(char *p, size_t size)
 {
-  short sum = 0;
+  unsigned int sum;
+
+  sum = 0;
   while (size--)
-    sum += *p++;
+    sum += *(unsigned char *)p++;
+
+  if (sum >> 16)
+    sum = (sum + (sum >> 16)) & 0xffff;
+
   return ~sum;
 }
 
 void main(void)
 {
-  short crc1, crc2;
+  short cksum1, cksum2;
 
-  memset(buffer, 0xff, 8192);
-  crc1 = crc(buffer, 8192);
-  crc2 = crc_asm(buffer, 8192);
+  memset(buffer, 0xff, BUFFER_SIZE);
+  cksum1 = cksum(buffer, BUFFER_SIZE);
+  cksum2 = cksum_asm(buffer, BUFFER_SIZE);
 
-  printf("CRC1 = 0x%hx, CRC2 = 0x%hx\n", crc1, crc2);
+  printf("CRC1 = 0x%hx, CRC2 = 0x%hx\n", 
+         cksum1, cksum2);
 }
