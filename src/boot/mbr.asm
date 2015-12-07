@@ -101,9 +101,9 @@ error_loading_loader:
 
 disk_read_ok:
   mov   si,loader
-  mov   cx,loader_crc - loader
-  call  calc_crc
-  and   ax,[loader_crc]
+  mov   cx,loader_cksum - loader
+  call  calc_cksum
+  and   ax,[loader_cksum]
   jnz   error_loading_loader
 
   jmp   loader
@@ -127,7 +127,7 @@ puts:
 ; Rotina auxiliar em modo real. Calcula o CRC de um bloco.
 ; Retorna o complemento do CRC para facilitar a comparação, mais tarde.
 ; Se fizermos um AND entre o valor retornado por essa função e o valor
-; que estará contido em "loader_crc", abaixo, o valor deve ser 0.
+; que estará contido em "loader_cksum", abaixo, o valor deve ser 0.
 ;
 ; Entrada: DS:SI endereço inicial do bloco.
 ;          CX tamanho do bloco em bytes.
@@ -135,7 +135,7 @@ puts:
 ;
 ; Rotina equivalente em C (desconsiderando os carry-outs):
 ;
-;   short calc_crc(char *buffer, size_t size)
+;   short calc_cksum(char *buffer, size_t size)
 ;   {
 ;      short sum = 0;
 ;      while (size--)
@@ -143,19 +143,19 @@ puts:
 ;      return ~sum;
 ;   }
 ;----------------------------
-calc_crc:
+calc_cksum:
   xor   ax,ax
   xor   dx,dx
-.calc_crc_loop:
-  cmp   cx,0
-  jbe   .calc_crc_end
+  test  cx,cx
+.calc_cksum_loop:
+  jz   .calc_cksum_end
   lodsb
   add   dx,ax
   adc   dx,0
-  inc   si
   dec   cx
-  jmp   .calc_crc_loop  
-.calc_crc_end:
+  jmp   .calc_cksum_loop  
+.calc_cksum_end:
+  mov   ax,dx
   not   ax
   ret
 
@@ -200,7 +200,7 @@ loader:         ; Início do loader.
 ; 2. Um outro pedaço é em modo protegido.
 %include "loader.asm"
 
-loader_crc:     dw    0     ; Apenas um checksum para determinar se
+loader_cksum:     dw    0     ; Apenas um checksum para determinar se
                             ; o código do MBR conseguiu ler todos os setores
                             ; corretamente. Vai ser preenchido por um utilitário
                             ; externo depois...

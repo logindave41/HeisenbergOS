@@ -11,12 +11,12 @@ char *find_signature(char *, size_t);
 
 int main(int argc, char *argv[])
 {
-  unsigned short crc;
+  unsigned short checksum;
   int cylinder, head, sector;
   long fsz;
   jmp_buf jb;
   FILE *f;
-  char *p, *q;
+  unsigned char *p, *q;
 
   if (argc != 2)
   {
@@ -83,12 +83,15 @@ int main(int argc, char *argv[])
   *p++ = head;
   *p = sector;
 
-  /* Calcula CRC do bloco do loader */
+  /* Calcula Checksum do bloco do loader */
   p = &buffer[512]; q = buffer + fsz - 2;
-  crc = 0;
+  checksum = 0;
   while (p < q)
-    crc += *p++;
-  *(unsigned short *)q = crc;
+    checksum += *p++;
+  /* leva em conta os carry's. */
+  if (checksum >> 16)
+    checksum = (checksum & 0xffff) + (checksum >> 16);
+  *(unsigned short *)q = checksum;
 
   /* Abre o arquivo, de novo, e escreve o buffer inteiro lá! */
   if ((f = fopen(argv[1], "wb")) == NULL)
