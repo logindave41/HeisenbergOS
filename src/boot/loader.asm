@@ -11,7 +11,7 @@ bits 16
 ; Liga e verifica o sinal gateA20.
 ;------------------------
 enableA20:
-  ; Tenta usar a BIOS:
+  ; Tenta usar a BIOS (pode ser que isso só funcione no PS/2):
   mov ax,0x2401
   int 0x15
   jnc testA20
@@ -73,10 +73,13 @@ error_enabling_a20_str:
 ; no modo protegido. Esse pedaço ainda é prelimiar!
 ;------------------------
 prepare_protected_mode:
-  ;*** É interessante desabilitar NMIs aqui também?
   cli
+
+  ;*** É interessante desabilitar NMIs aqui também?
+
   lgdt  [gdtptr]
   lidt  [idtptr]
+
   ;*** É necessário carregar o Task Register com um TSS válido aqui?
   
   ; Habilita o bit PE de CR0.
@@ -108,6 +111,7 @@ gdt:
   GDT_ENTRY 0,0xfffff,0xc9a     ; Kernel Codeseg descriptor
   GDT_ENTRY 0,0xfffff,0xc92     ; Kernel Dataseg descriptor
   ;*** Possívelmente terei que colocar um TSS aqui.
+  ;*** Possívelmente terei que colocar entradas para o Userspace (ainda não "presentes").
 gdt_end:
 
 ;******************************************************************************
@@ -137,3 +141,10 @@ protected_mode_entry:
   sti
 
   hlt   ; continua...
+
+;=======================================
+; Espaço para rotinas que emulam a BIOS...
+; Usando C calling convention, só para manter consistência...
+;=======================================
+
+
