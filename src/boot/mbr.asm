@@ -200,8 +200,13 @@ loader:         ; Início do loader.
 ; 2. Um outro pedaço é em modo protegido.
 %include "loader.asm"
 
-loader_cksum:     dw    0     ; Apenas um checksum para determinar se
-                            ; o código do MBR conseguiu ler todos os setores
-                            ; corretamente. Vai ser preenchido por um utilitário
-                            ; externo depois...
+;----------------------------
+; Mesmo artifício usado para o final do setor de boot,
+; Só que, agora, garante que nosso arquivo terá tamanho exato de múltiplos de 512.
+;----------------------------
+  times 510 - (($ - $$) % 512) db 0
+loader_cksum: dw    0     ; Apenas um checksum para determinar se
+                          ; o código do MBR conseguiu ler todos os setores
+                          ; corretamente. Vai ser preenchido por um utilitário
+                          ; externo depois...
 _end:           ; Fim do loader.
