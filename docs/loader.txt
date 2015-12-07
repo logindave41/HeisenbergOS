@@ -1,0 +1,28 @@
+O "loader" é composto de duas etapas:
+
+1. O setor de boot;
+2. O "loader" propriemente dito.
+
+O setor de boot corresponde a um bloco de 512 bytes que é lido pela BIOS
+para o endereço 0x0000:0x7c00. Ele lerá os setores adicionais que compõem o
+loader logo depois que o código original for relocado para o endereço
+0x0060:0x0000. Assim, o loader própriamente dito começa no endereço 0x00800.
+
+É necessário ler vários setores porque o código que lida com o modo protegido
+precisa implementar rotinas que emulam o funcionamento da BIOS, já que esta
+última estará inacessível quando o modo for chaveado. Ainda, o loader deverá ser
+capaz de lidar com os fundamentos do sistema de arquvios, para poder ler o
+kernel de um arquivo armazenado em disco. Isso não é possível fazer com o espaço
+de apenas 1 setor (512 bytes).
+
+O loader colocará o processador no modo i386, deixando para o kernel chaveá-lo
+para o modo x86-64.
+
+O loader coloca o processador em modo protegido, usando uma tabela de descritores
+bem simples que contém apenas dois segmentos: O segmento 1 é dedicado a código
+e o segmento 2 a dados. Ambos tem os atributos: Endereço base 0x00000000, Limite
+ de 4 GB, 32 bits, DPL 0 e Read/Write.
+
+O loader não lidará com interrupções, para isso ele provavelmente terá que
+mascará-las no PIC, inclusive a NMI (isso ainda não foi implementado). É tarefa
+do kernel ajustar as interrupções corretamente.
