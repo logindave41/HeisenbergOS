@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
     checksum += *p++;
   /* leva em conta os carry's. */
   if (checksum >> 16)
-    checksum = (checksum & 0xffff) + (checksum >> 16);
+    checksum = (checksum + (checksum >> 16)) & 0xffff;
   *(unsigned short *)q = checksum;
 
   /* Abre o arquivo, de novo, e escreve o buffer inteiro lá! */
