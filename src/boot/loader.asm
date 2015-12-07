@@ -77,8 +77,8 @@ prepare_protected_mode:
   cli
   lgdt  [gdtptr]
   lidt  [idtptr]
-  ;*** Precisa carregar Task Register aqui?! Acho que sim!
-
+  ;*** É necessário carregar o Task Register com um TSS válido aqui?
+  
   ; Habilita o bit PE de CR0.
   mov   eax,cr0
   or    eax,1
@@ -91,7 +91,7 @@ prepare_protected_mode:
 ; Estruturas usadas por LGDT, LIDT (e LTR?).
 ;--------------------------
 gdtptr:
-  dw    gdt_end - gdt     ; Tamanho da tabela.
+  dw    gdt_end - gdt - 1 ; Tamanho da tabela (aparentemente é necessário esse -1 no final!).
   dd    _PTR(gdt)         ; Endereço físico da tabela.
 
 ; Por enquanto não criei ainda uma tabela de vetores interrupção!
@@ -107,6 +107,7 @@ gdt:
   GDT_ENTRY 0,0,0               ; Null descriptor
   GDT_ENTRY 0,0xfffff,0xc9a     ; Kernel Codeseg descriptor
   GDT_ENTRY 0,0xfffff,0xc92     ; Kernel Dataseg descriptor
+  ;*** Possívelmente terei que colocar um TSS aqui.
 gdt_end:
 
 ;******************************************************************************
