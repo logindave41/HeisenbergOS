@@ -8,11 +8,16 @@ para o endereço 0x0000:0x7c00. Ele lerá os setores adicionais que compõem o
 loader logo depois que o código original for relocado para o endereço
 0x0060:0x0000. Assim, o loader própriamente dito começa no endereço 0x00800.
 
-É necessário ler vários setores porque o código que lida com o modo protegido
-precisa implementar rotinas que emulam o funcionamento da BIOS, já que esta
-última estará inacessível quando o modo for chaveado. Ainda, o loader deverá ser
-capaz de lidar com os fundamentos do sistema de arquvios, para poder ler o
-kernel de um arquivo armazenado em disco. Isso não é possível fazer com o espaço
+Como o loader é um pedaço de código que precisa ser pequeno (quanto menor, melhor),
+ele é totalmente escrito em assembly. Mais tarde, no caso do kernel, usaremos
+"sections" para organizar o código e os dados e quase a totalidade do código será
+escrita em C.
+
+É necessário que o loader leia vários setores porque o código que lida com o 
+modo protegido precisa implementar rotinas que emulam o funcionamento da BIOS, 
+já que esta última estará inacessível quando o modo for chaveado. Ainda, o loader 
+deverá ser capaz de lidar com os fundamentos do sistema de arquvios, para poder ler 
+o kernel de um arquivo armazenado em disco. Isso não é possível fazer com o espaço
 de apenas 1 setor (512 bytes).
 
 O loader colocará o processador no modo i386, deixando para o kernel chaveá-lo
