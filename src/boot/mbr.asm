@@ -1,8 +1,17 @@
 ; mbr.asm
 ;
-; Embora eu tenha chamado esse arquivo de mbr.asm, ele não implementa a MBR.
-; Preferi usar um boot manager como o GRUB para "bootar" a partição correta.
-; Essa listagem implementa o bootsector e o loader do kernel.
+; Este é o setor de boot (Master Boot Record), que não considera
+; A tabela de partição. Se o SO for implementado em um HD é
+; interessante usar um boot manager...
+;
+; A idéia aqui é carregar o "loader" que pulará para o modo protegido
+; e carregará o kernel na memória alta (0x100000). O modo protegido
+; aqui é ajustado de uma maneira mínima, sem paginação, sem considerar
+; tratamento de interrupções..
+;
+; A primeira parte contém código em 16 bits, que pode usar a BIOS.
+; Os "segmentos" .text e .data contém código em 32 bits, que são executados
+; em modo protegido e estão contidos no arquivo loader.asm.
 ;
 bits 16
 
@@ -27,14 +36,17 @@ drive_no: db  0x80  ; Drive default é o primeiro HD, mas isso será
 
           ; Nosso loader tem tamanho de múltiplo exato de 512 bytes!
           ; Com isso, precisamos apenas calclar o número de setores gastos.
+          ; É complicado calcular isso em tempo de compilação, então deixo
+          ; para o código fazê-lo.
 num_sectors_after_mbr:  db  0
 
-          ; Strings
+          ; Strings...
 loading_str:            db  "Loading Heisenberg OS...",13,10,0
 disk_read_error_str:    db  "Error reading loader. System halted!", 13, 10, 0
 
 section .btext 
 
+; Símbolos definidos pelo linker ou pelo loader.asm.
 extern _loader_start
 extern _end
 extern loader
@@ -46,26 +58,25 @@ extern _cksum
 ; da BIOS (0x0040:0) sem muito esforço, no entanto, causa alguns problema para 
 ; nós...
 ;
-; O "segmento" de todo programa ASM standalone, que não é especificado
-; no script do linker, começa sempre no endereço 0, não em 0x7c00. Assim,
-; é mais fácil "normalizar" o endereço do boot para 0x07c0:0... É isso
-; que o "far jump" abaixo faz.
+; O "segmento" ".bstext" é o primeiro colocado no arquivo binário, de acordo
+; com o script do linker. E o "endereço virtual" desse segmento é 0.
+; Assim, faço um ljmp para que CS contenha 0x07c0.
 ;-----------------------------
 _start:
   jmp   _BOOTSEG:boot_start
 
-;-----------------------------
-; Região de dados
-;-----------------------------
-
-; O código do setor de boot começa aqui!
 boot_start:
+  ; Ajusta o seletor DS.
+  ; Faço DS ser o mesmo que CS para facilitar o acesso aos dados.
   mov   ax,cs
-  mov   ds,ax         ; Ajusta DS para acessar os mesmos dados deste segmento.
+  mov   ds,ax
 
   ; É interessante inicializar uma pilha aqui porque
   ; não sabemos onde a pilha da BIOS está. Coloquei a nossa
-  ; pilha (de apenas 2 kB) no final da memória RAM convencional.
+  ; pilha no final da memória RAM convencional, em 0x9fffc.
+  ; Eu poderia simplesmente zerar SP, mas prefiro garantir que
+  ; SP esteja garantidamente no topo da memória RAM baixa e alinhado
+  ; por WORD.
   cli                 ; desabilita interrupções.
   mov   ax,_STKSEG
   mov   ss,ax
@@ -75,22 +86,24 @@ boot_start:
 ;----------------------------
 ; MBR é apenas um "pré-boot". A BIOS carrega apenas esse setor
 ; que, por sua vez, carregará setores adicionais (que lidarão 
-; com o sistema de arquivos usados no SO).
+; com o sistema de arquivos usados no SO). Assim, copiamos todo o setor para uma
+; região mais baixa da memória (0x00600) para carregarmos o loader logo após,
+; a partir do endereço 0x00800. 
 ;
-; Assim, copiamos todo o setor para uma região mais baixa da memória
-; para carregarmos o setor de boot na mesma posição onde este código se encontra.
-; Escolhi o endereço físico 0x00600 (0x0060:0x0000) para isso.
+; O motivo da escolha do endereço 0x00600 é que esta é a posição logo acima
+; da área de dados da BIOS.
 ;
 ; Note que todo esse código não pode ultrapassar uns 8 kB se você pretende
 ; que ele funcione num diskete de 1.44 MB (18 setores por trilha).
 ;----------------------------
   cld                           ; Certifica-se que SI ou DI sejam incrementados.
+                                ; nas instruções de bloco.
   mov   ax,_MBRSEG
   mov   es,ax
-  xor   si,si
-  mov   di,si
-  mov   cx,256
-  rep   movsw
+  xor   esi,esi
+  mov   edi,esi
+  mov   ecx,128
+  rep   movsd
   jmp   _MBRSEG:mbr_real_start  ; Salta para a nova cópia.
 
 mbr_real_start:
@@ -116,24 +129,27 @@ mbr_real_start:
   call  puts
 
   ; Usa a BIOS para carregar o loader...
-  ; É necessário adequar o valor de CX...
+  ; É necessário adequar o valor de CX em conformidade com INT 0x13/AH=2.
   mov   ax,ds
-  mov   es,ax
+  mov   es,ax                       ; Ajusta ES.
   mov   bx,_loader_start
   call  chs_cylinder_sector_encode
   mov   al,[num_sectors_after_mbr]
   mov   dh,[head]
-  ; OBS: A BIOS fornece o drive em DL!
-  ;      Note que não mexemos com DL até agora!
+  mov   dl,[drive_no]
   int   0x13
-  jnc   disk_read_ok
+  jnc   disk_read_ok                ; Se não houveram erros...
 
-  ; Se chegou aqui, teve erro de leitura...
+  ; Houve um erro, mostra mensagem e paraliza o processador.
+  ; OBS: A especificação da INT 0x19 nos diz que podemos fazer um
+  ; retorno "far", deixando a BIOS decidir se tenta bootar pelo próximo
+  ; dispositivo. Escolhi não permitir isso!
 error_loading_loader:
   mov   si,disk_read_error_str
   call  puts
 
   ; Pára tudo e deixa parado (mesmo se ouver uma interrupção!).
+  ; Note que exportei o símbolo halt, que também é usado pelo loader.asm.
 global  halt
 halt:
   cli           ; Desabilita interrupções.
@@ -142,21 +158,23 @@ halt:
                 ; mas uma interrupção NMI pode tirá-lo desse estado de
                 ; "sonolência"... Não quero ter que mascarar NMIs aqui, agora.
 
+  ; Se conseguiu ler os outros setores, testa o checksum...
 disk_read_ok:
   mov   si,_loader_start
   mov   cx,_end
   sub   cx,si
   call  calc_cksum
   and   ax,[_cksum]
-  jnz   error_loading_loader
-  jmp   loader
+  jnz   error_loading_loader      ; Se o checksum está errado, pára tudo!
+  jmp   loader                    ; senão, salta para o loader.
 
 ;----------------------------
 ; Rotina auxiliar em modo real, usando a BIOS.
 ; puts
 ;   Entrada: DS:SI = ponteiro para a string
 ;----------------------------
-global puts
+global puts         ; usaremos puts no loader também, exporto o endereço
+                    ; para o linker por causa disso!
 puts:
   lodsb
   or    al,al     ; obteve 0?
@@ -185,6 +203,13 @@ chs_cylinder_sector_encode:
   or    cl,al             ; mistura CL com AL.
   ret
 
+;-----------------------------
+; Calcula o checksum de um bloco e retorna o inverso dele.
+; Entrada: DS:SI aponta para o início do bloco.
+;          CX tem o tamanho do bloco.
+; Saída: AX
+; Destrói CX e DX.
+;-----------------------------
 calc_cksum:
   xor   ax,ax
   xor   dx,dx

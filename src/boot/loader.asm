@@ -1,14 +1,15 @@
-;-----------------------------------------------------------------
+;
 ; Este é o código que começa a inicialização da carga do kernel...
-;-----------------------------------------------------------------
 
-; Alguns macros para facilitar nossa vida.
-
+;----------------------------------
+; Algumas definições e macros para facilitar nossa vida.
+;----------------------------------
 %include "definitions.inc"
 %include "macros.inc"
 
 bits 16
 
+; Usados para inicializar o segmento .bss
 extern _bss_start
 extern _bss_end
 
@@ -44,33 +45,36 @@ gdt_end:
 ;=====================
 section .ltext
 
+; Funções externas a esse módulo.
 extern main
 extern puts
 extern halt
 
+; "loader" é importado pelo mbr.asm.
 global loader
 loader:
   ; Zera todo o segmento .bss
   mov   ax,ds
   mov   es,ax
-  mov   di,_bss_start
-  mov   cx,_bss_end
-  sub   cx,di
+  mov   edi,_bss_start
+  mov   ecx,_bss_end
+  sub   ecx,edi
   xor   al,al
   rep   stosb
 
 ;------------------------
-; Liga e verifica o sinal gateA20.
+; Antes de entrarmos no modo protegido precisamos ligar o
+; sinal "Gate A20". 
 ;------------------------
 enableA20:
   ; Tenta usar a BIOS (pode ser que isso só funcione no PS/2):
   mov ax,0x2401
   int 0x15
-  jnc testA20
+  jnc testA20       ; Se conseguiu, testa!
 
   ; Se não conseguiu tenta usar o modo "fast".
   in  al,0x92
-  or  al,2
+  or  al,0b00000010
   out 0x92,al
 
   ;*** É preciso tentar habilitar usando o Keyboard Controller?!
@@ -111,7 +115,8 @@ testA20:
 
   mov   ds,cx       ; Recupera DS.
 
-  jz    prepare_protected_mode
+  jz    prepare_protected_mode        ; Se o teste foi ok, salta para a rotina
+                                      ; que coloca o processador em modo protegido.
 
   ; Erro ao testar o gate A20...
   mov   si,error_enabling_a20_str
@@ -125,12 +130,34 @@ testA20:
 prepare_protected_mode:
   cli
 
-  ;*** É interessante desabilitar NMIs aqui também?
+  ;-------
+  ; Saltar para o modo protegido é um passo crítico. NENHUMA interrupção pode acontecer.
+  ; daí temos que desabilitar a NMI.
+  ;-------
+  in    al,0x70
+  or    al,0b10000000
+  out   0x70,al         ; desabilita NMI
 
+  ;-------
+  ; Aproveito para mascarar as interrupções aceitáveis pelo PIC1
+  in    al,0x21
+  and   al,0b00000100         ; Exceto a IRQ2!
+  out   0x21,al
+
+  ; E também pelo PIC2.
+  xor   al,al
+  out   0xa1,al
+
+  ; Note que não guardei as máscaras anteriores. Só vamos configurar as
+  ; IRQs de novo no código do kernel.
+  ;--------
+
+  ; Agora podemos carregar os registradores das tabelas de descritores...
   lgdt  [gdtptr]
   lidt  [idtptr]
 
   ;*** É necessário carregar o Task Register com um TSS válido aqui?
+  ;*** A documentação da Intel diz que sim!
   
   ; Habilita o bit PE de CR0.
   mov   eax,cr0
@@ -138,6 +165,7 @@ prepare_protected_mode:
   mov   cr0,eax
 
   ; Salta para o modo protegido!
+  ; Note que o seletor agora tem estrtutura diferente da do modo real!
   jmp   _CODE32SEG:_PTR(protected_mode_entry)
 
 
@@ -164,14 +192,6 @@ protected_mode_entry:
   mov   gs,ax
   mov   ss,ax
   mov   esp,0x9fffc     ; Continuamos com SS:ESP apontando para uma pilha na
-                        ; memória inferior!
-  sti
+                        ; memória inferior! Voltei a colocar ESP em 0x9fffc!
 
-  jmp   main
-
-;=======================================
-; Espaço para rotinas que emulam a BIOS...
-; Usando C calling convention, só para manter consistência...
-;=======================================
-
-
+  jmp   main            ; salta para a rotina em C. "main" não retornará jamais...

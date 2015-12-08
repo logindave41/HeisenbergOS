@@ -1,5 +1,5 @@
 # Regra para criação do loader... Crio o mbr.lst para ver o código gerado!
-CFLAGS=-O2 -m32 -nostdlib -ffreestanding
+CFLAGS=-O2 -m32 -I../kernel/include -nostdlib -ffreestanding
 objectfiles=mbr.o loader.o main.o
 
 ../../bin/mbr.bin: $(objectfiles)
