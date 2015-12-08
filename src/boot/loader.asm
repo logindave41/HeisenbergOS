@@ -194,4 +194,5 @@ protected_mode_entry:
   mov   esp,0x9fffc     ; Continuamos com SS:ESP apontando para uma pilha na
                         ; memória inferior! Voltei a colocar ESP em 0x9fffc!
 
+  ; Este é um jmp "short"! Não precisa ajustar o ponteiro! :)
   jmp   main            ; salta para a rotina em C. "main" não retornará jamais...
