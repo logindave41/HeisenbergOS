@@ -178,6 +178,3 @@ chs_cylinder_sector_encode:
   or    cl,al             ; mistura CL com AL.
   ret
 
-  times 510 - ($ - $$) db 0
-_magic:
-  db    0x55, 0xaa

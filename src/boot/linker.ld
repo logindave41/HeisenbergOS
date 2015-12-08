@@ -5,7 +5,8 @@ SECTIONS {
   . = 0;
   .btext : { *(.btext) }
   .bdata : { *(.bdata) }
-  . = 0x800;
+  . = 510;
+  .brodata : { *(.brodata) SHORT(0xaa55) }
   _loader_start = .;
   .ltext : { *(.ltext) }
   .ldata : { *(.ldata) }

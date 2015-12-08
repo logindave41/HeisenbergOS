@@ -9,6 +9,9 @@
 
 bits 16
 
+extern _bss_start
+extern _bss_end
+
 section .ldata
 
 error_enabling_a20_str:
@@ -38,6 +41,7 @@ gdt:
   ;*** Possívelmente terei que colocar entradas para o Userspace (ainda não "presentes").
 gdt_end:
 
+;=====================
 section .ltext
 
 extern main
