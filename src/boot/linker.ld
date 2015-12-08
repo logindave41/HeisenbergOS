@@ -13,7 +13,12 @@ SECTIONS {
   . = ALIGN(16);
   .text  : { *(.text) }
   .data  : { *(.data) }
-  .rodata : { *(.rodata) }
+  .rodata : { 
+    *(.rodata) 
+    . = . + (512 - (. % 512)) - 2;
+    _cksum = .;
+    SHORT(0)
+  }
   _end = .;
   _bss_start = .;
   .bss : { *(.bss) }

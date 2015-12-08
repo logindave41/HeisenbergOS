@@ -38,6 +38,7 @@ section .btext
 extern _loader_start
 extern _end
 extern loader
+extern _cksum
 
 ;----------------------------
 ; Quando a BIOS carrega a MBR ela o coloca no endereço 0x0000:0x7c00.
@@ -142,6 +143,12 @@ halt:
                 ; "sonolência"... Não quero ter que mascarar NMIs aqui, agora.
 
 disk_read_ok:
+  mov   si,_loader_start
+  mov   cx,_end
+  sub   cx,si
+  call  calc_cksum
+  and   ax,[_cksum]
+  jnz   error_loading_loader
   jmp   loader
 
 ;----------------------------
@@ -178,3 +185,15 @@ chs_cylinder_sector_encode:
   or    cl,al             ; mistura CL com AL.
   ret
 
+calc_cksum:
+  xor   ax,ax
+  xor   dx,dx
+.loop:
+  lodsb
+  add   dx,ax
+  adc   dx,0
+  dec   cx
+  jnz   .loop
+  not   dx
+  mov   ax,dx
+  ret  
