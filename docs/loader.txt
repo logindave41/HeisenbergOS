@@ -3,31 +3,75 @@ O "loader" é composto de duas etapas:
 1. O setor de boot;
 2. O "loader" propriemente dito.
 
-O setor de boot corresponde a um bloco de 512 bytes que é lido pela BIOS
-para o endereço 0x0000:0x7c00. Ele lerá os setores adicionais que compõem o
-loader logo depois que o código original for relocado para o endereço
-0x0060:0x0000. Assim, o loader própriamente dito começa no endereço 0x00800.
+A primeira etapa é composta totalmente em código de 16 bits. Já o loader tem um
+pedaço em 16 bits e outro em 32, no modo protegido. Para conseguir isso uso um
+script para o linker, separando o código em segmentos:
 
-Como o loader é um pedaço de código que precisa ser pequeno (quanto menor, melhor),
-ele é totalmente escrito em assembly. Mais tarde, no caso do kernel, usaremos
-"sections" para organizar o código e os dados e quase a totalidade do código será
-escrita em C.
+  .btext e .bdata são os segmentos contendo código e dados em 16 bits, com
+    tamanho máximo de 512 bytes que compõem o bootsector.
+  .ltext e .ldata são também segmentos de 16 bits com código e dados que
+    compõem a primeira parte do loader.
+  .text, .data e .rodata contém os segmentos da porção 32 bits, com código
+    totalmente escrito em C (exceto pela preparação do ambiente).
 
-É necessário que o loader leia vários setores porque o código que lida com o 
-modo protegido precisa implementar rotinas que emulam o funcionamento da BIOS, 
-já que esta última estará inacessível quando o modo for chaveado. Ainda, o loader 
-deverá ser capaz de lidar com os fundamentos do sistema de arquvios, para poder ler 
-o kernel de um arquivo armazenado em disco. Isso não é possível fazer com o espaço
-de apenas 1 setor (512 bytes).
+O setor de boot corresponde a um bloco de 512 bytes que é lido pela BIOS,
+normalmente, para o endereço 0x0000:0x7c00. Para não complicar muito o código do
+setor de boot, este endereço é normalizado para 0x07c0:0000 através de um ljmp.
+O código do setor de boot lerá os setores adicionais logo depois que o código
+original for relocado para o endereço 0x0060:0x0000, logo acima da área de dados
+da BIOS. Assim, o loader própriamente dito começa no endereço linear 0x00800.
 
-O loader colocará o processador no modo i386, deixando para o kernel chaveá-lo
-para o modo x86-64.
+O loader colocará o processador no modo i386, deixando para o kernel o trabalho
+de chaveá-lo para o modo x86-64.
 
-O loader coloca o processador em modo protegido, usando uma tabela de descritores
-bem simples que contém apenas dois segmentos: O segmento 1 é dedicado a código
-e o segmento 2 a dados. Ambos tem os atributos: Endereço base 0x00000000, Limite
- de 4 GB, 32 bits, DPL 0 e Read/Write.
+O loader coloca o processador em modo protegido, usando uma tabela de
+descritores bem simples que contém apenas dois segmentos: O segmento 1 é
+dedicado a código e o segmento 2 a dados. É possível (mas ainda não determinado)
+que um segmento extra seja necessário para conter um único TSS.
 
-O loader não lidará com interrupções, para isso ele provavelmente terá que
-mascará-las no PIC, inclusive a NMI (isso ainda não foi implementado). É tarefa
-do kernel ajustar as interrupções corretamente.
+No modo protegido ambos os segmentos têm atributos: Endereço base
+0x00000000, Limite  de 4 GB, 32 bits, DPL 0 e Read/Write.
+
+O loader não lidará com interrupções, para isso ele inicializa uma IDT vazia e
+mascara as IRQs do PIC e também a NMI. O kernel colocará as rotinas de
+tratamento de interrupções corretas no lugar. Isso não deve ser problemático
+porque para carregar o kernel, em modo protegido, precisamos apenas lidar com a
+especificação PIO-ATA, que é bem simples e não precisaremos usar DMA.
+
+Embora o endereço linear base de todo o código seja conhecido, no modo protegido
+teremos que ajustar ponteiros e referências às variáveis nos códigos em C. É
+complicado assinalar um endereço base para o segmento .text com segmentos
+misturados sem alterar drásticamente o tamanho do arquivo binário final.
+Ponteiros e variáveis precisarão ser ajustados somando-se 0x00000600 às suas
+posições originais, atribuídas pelo linker. Isso deve ser feito para variáveis
+globais e estáticas locais apenas, já que o compilador tende a usar
+registradores e a pilha para conter variáveis locais "auto". Um exemplo...
+Suponha que tenhamos uma variável global 'x' do tipo 'int':
+
+  /* Variável alocada no segmento .bss... */
+  int x;
+
+  /* Escrevendo na variável! */
+  *(int *)((void *)x + 0x00000600U) = 4;
+
+Para tanto, alguns macros foram definidos:
+
+  CHAR_VAR(var)
+  UCHAR_VAR(var)
+  SHORT_VAR(var)
+  USHORT_VAR(var)
+  INT_VAR(var)
+  UINT_VAR(var)
+
+Com esses macros podemos, inclusive, usar "pos" e "pre" incrementos e
+decrementos sem problemas:
+
+  INT_VAR(x)++;     /* É a mesma coisa que x++; */
+
+Infelizmente isso acresentará o valor 0x00000600 em cada referência, no código
+assembly final, mas o compilador pode ser esperto o suficiente para otimizar
+esse código...
+
+Podemos dar uma mãozinha copiando o conteúdo de uma variável global para uma
+local, trabalhando com ela e só atualizando a outra no final do processo (ou
+quando for necessário).
