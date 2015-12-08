@@ -10,4 +10,3 @@
 
 %define _KERNEL_BASE_ADDRESS 0x100000
 
-%define _PTR(x) ((x) + (_MBRSEG << 4))

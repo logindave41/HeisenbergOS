@@ -3,9 +3,57 @@
 ;-----------------------------------------------------------------
 
 ; Alguns macros para facilitar nossa vida.
+
+%include "definitions.inc"
 %include "macros.inc"
 
 bits 16
+
+section .ldata
+
+error_enabling_a20_str:
+  db    "Error enabling gate A20!", 13, 10, 0
+
+;--------------------------
+; Estruturas usadas por LGDT, LIDT (e LTR?).
+;--------------------------
+gdtptr:
+  dw    gdt_end - gdt - 1 ; Tamanho da tabela (aparentemente é necessário esse -1 no final!).
+  dd    _PTR(gdt)         ; Endereço físico da tabela.
+
+; Por enquanto não criei ainda uma tabela de vetores interrupção!
+idtptr:
+  dw    0
+  dd    0
+
+;--------------------------
+; Tabela de descritores globais simples.
+;--------------------------
+  align 16,db 0
+gdt:
+  GDT_ENTRY 0,0,0               ; Null descriptor
+  GDT_ENTRY 0,0xfffff,0xc9a     ; Kernel Codeseg descriptor
+  GDT_ENTRY 0,0xfffff,0xc92     ; Kernel Dataseg descriptor
+  ;*** Possívelmente terei que colocar um TSS aqui.
+  ;*** Possívelmente terei que colocar entradas para o Userspace (ainda não "presentes").
+gdt_end:
+
+section .ltext
+
+extern main
+extern puts
+extern halt
+
+global loader
+loader:
+  ; Zera todo o segmento .bss
+  mov   ax,ds
+  mov   es,ax
+  mov   di,_bss_start
+  mov   cx,_bss_end
+  sub   cx,di
+  xor   al,al
+  rep   stosb
 
 ;------------------------
 ; Liga e verifica o sinal gateA20.
@@ -65,8 +113,6 @@ testA20:
   mov   si,error_enabling_a20_str
   call  puts
   jmp   halt
-error_enabling_a20_str:
-  db    "Error enabling gate A20!", 13, 10, 0
 
 ;------------------------
 ; Prepara o ambiente para entrarmos
@@ -90,29 +136,6 @@ prepare_protected_mode:
   ; Salta para o modo protegido!
   jmp   _CODE32SEG:_PTR(protected_mode_entry)
 
-;--------------------------
-; Estruturas usadas por LGDT, LIDT (e LTR?).
-;--------------------------
-gdtptr:
-  dw    gdt_end - gdt - 1 ; Tamanho da tabela (aparentemente é necessário esse -1 no final!).
-  dd    _PTR(gdt)         ; Endereço físico da tabela.
-
-; Por enquanto não criei ainda uma tabela de vetores interrupção!
-idtptr:
-  dw    0
-  dd    0
-
-;--------------------------
-; Tabela de descritores globais simples.
-;--------------------------
-  align 16
-gdt:
-  GDT_ENTRY 0,0,0               ; Null descriptor
-  GDT_ENTRY 0,0xfffff,0xc9a     ; Kernel Codeseg descriptor
-  GDT_ENTRY 0,0xfffff,0xc92     ; Kernel Dataseg descriptor
-  ;*** Possívelmente terei que colocar um TSS aqui.
-  ;*** Possívelmente terei que colocar entradas para o Userspace (ainda não "presentes").
-gdt_end:
 
 ;******************************************************************************
 ;------------------------
@@ -140,7 +163,7 @@ protected_mode_entry:
                         ; memória inferior!
   sti
 
-  hlt   ; continua...
+  jmp   main
 
 ;=======================================
 ; Espaço para rotinas que emulam a BIOS...

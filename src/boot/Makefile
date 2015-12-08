@@ -1,7 +1,15 @@
 # Regra para criação do loader... Crio o mbr.lst para ver o código gerado!
-../../bin/mbr.bin: mbr.asm loader.asm
-	nasm -f bin -o $@ mbr.asm -l mbr.lst
+CFLAGS=-O2 -m32 -nostdlib -ffreestanding
+objectfiles=mbr.o loader.o main.o
+
+../../bin/mbr.bin: $(objectfiles)
+	ld -T ./linker.ld -o $@ $^
+
+%.o: %.c
+
+%.o: %.asm
+	nasm -f bin -o $@ $< 
 
 .PHONY: clean
 clean:
-	rm *.lst
+	rm *.lst *.o

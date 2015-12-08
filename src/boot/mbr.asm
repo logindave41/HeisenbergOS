@@ -8,23 +8,8 @@ bits 16
 
 %include "definitions.inc"
 
-;----------------------------
-; Quando a BIOS carrega a MBR ela o coloca no endereço 0x0000:0x7c00.
-; Note que o segmento é 0... Isso permite que o código acesse a área
-; da BIOS (0x0040:0) sem muito esforço, no entanto, causa alguns problema para 
-; nós...
-;
-; O "segmento" de todo programa ASM standalone, que não é especificado
-; no script do linker, começa sempre no endereço 0, não em 0x7c00. Assim,
-; é mais fácil "normalizar" o endereço do boot para 0x07c0:0... É isso
-; que o "far jump" abaixo faz.
-;-----------------------------
-_start:
-  jmp   _BOOTSEG:boot_start
-
-;-----------------------------
-; Região de dados
-;-----------------------------
+;===================
+section .bdata
 
           ; Temos essa assinatura aqui porque alguns valores serão
           ; preenchidos por um utilitário externo. Precisamos dela
@@ -42,11 +27,35 @@ drive_no: db  0x80  ; Drive default é o primeiro HD, mas isso será
 
           ; Nosso loader tem tamanho de múltiplo exato de 512 bytes!
           ; Com isso, precisamos apenas calclar o número de setores gastos.
-num_sectors_after_mbr:  db  (_end - loader) / 512
+num_sectors_after_mbr:  db  0
 
           ; Strings
 loading_str:            db  "Loading Heisenberg OS...",13,10,0
 disk_read_error_str:    db  "Error reading loader. System halted!", 13, 10, 0
+
+section .btext 
+
+extern _loader_start
+extern _end
+extern loader
+
+;----------------------------
+; Quando a BIOS carrega a MBR ela o coloca no endereço 0x0000:0x7c00.
+; Note que o segmento é 0... Isso permite que o código acesse a área
+; da BIOS (0x0040:0) sem muito esforço, no entanto, causa alguns problema para 
+; nós...
+;
+; O "segmento" de todo programa ASM standalone, que não é especificado
+; no script do linker, começa sempre no endereço 0, não em 0x7c00. Assim,
+; é mais fácil "normalizar" o endereço do boot para 0x07c0:0... É isso
+; que o "far jump" abaixo faz.
+;-----------------------------
+_start:
+  jmp   _BOOTSEG:boot_start
+
+;-----------------------------
+; Região de dados
+;-----------------------------
 
 ; O código do setor de boot começa aqui!
 boot_start:
@@ -86,8 +95,21 @@ boot_start:
 mbr_real_start:
   mov   ds,ax       ; Ajusta DS.
 
-  mov   [drive_no],dl ; Guarda o nº do drive fornecido pela BIOS.
+  ; Armazena o drive informado pela BIOS.
+  mov   [drive_no],dl
 
+  ; Calcula o número de setores do loader.
+  mov   ax,_end
+  sub   ax,_loader_start
+  cwd
+  mov   bx,512
+  div   bx
+  or    dx,dx
+  jz    .no_more_sectors
+  inc   ax
+.no_more_sectors:
+  mov   [num_sectors_after_mbr],al
+  
   ; Mostra a string "Loading Heisenberg OS...".
   mov   si,loading_str
   call  puts
@@ -96,7 +118,7 @@ mbr_real_start:
   ; É necessário adequar o valor de CX...
   mov   ax,ds
   mov   es,ax
-  mov   bx,loader
+  mov   bx,_loader_start
   call  chs_cylinder_sector_encode
   mov   al,[num_sectors_after_mbr]
   mov   dh,[head]
@@ -111,6 +133,7 @@ error_loading_loader:
   call  puts
 
   ; Pára tudo e deixa parado (mesmo se ouver uma interrupção!).
+global  halt
 halt:
   cli           ; Desabilita interrupções.
   hlt
@@ -119,14 +142,6 @@ halt:
                 ; "sonolência"... Não quero ter que mascarar NMIs aqui, agora.
 
 disk_read_ok:
-  ; Calcula e verifica o checksum do loader.
-  mov   si,loader
-  mov   cx,loader_cksum - loader
-  call  calc_cksum
-  and   ax,[loader_cksum]
-  jnz   error_loading_loader
-
-  ; Se tudo deu certo, salta para o loader.
   jmp   loader
 
 ;----------------------------
@@ -134,6 +149,7 @@ disk_read_ok:
 ; puts
 ;   Entrada: DS:SI = ponteiro para a string
 ;----------------------------
+global puts
 puts:
   lodsb
   or    al,al     ; obteve 0?
@@ -144,44 +160,6 @@ puts:
 .puts_end:
   ret
   
-;----------------------------
-; Rotina auxiliar em modo real. Calcula o CRC de um bloco.
-; Retorna o complemento do CRC para facilitar a comparação, mais tarde.
-; Se fizermos um AND entre o valor retornado por essa função e o valor
-; que estará contido em "loader_cksum", abaixo, o valor deve ser 0.
-;
-; Entrada: DS:SI endereço inicial do bloco.
-;          CX tamanho do bloco em bytes.
-; Saída:   AX crc.
-;
-; Rotina equivalente (só que menor!) em C:
-;
-;   short calc_cksum(char *buffer, size_t size)
-;   {
-;      unsigned short sum = 0;
-;
-;      while (size--)
-;        sum += *(unsigned char *)buffer++;
-;      if (sum >> 16) sum = ((sum >> 16) + sum) & 0xffff;
-;      return ~sum;
-;   }
-;----------------------------
-calc_cksum:
-  xor   ax,ax
-  xor   dx,dx
-  test  cx,cx
-.calc_cksum_loop:
-  jz   .calc_cksum_end
-  lodsb
-  add   dx,ax
-  adc   dx,0
-  dec   cx
-  jmp   .calc_cksum_loop  
-.calc_cksum_end:
-  mov   ax,dx
-  not   ax
-  ret
-
 ;----------------------------
 ; Rotina auxiliar: Monta, em CX o par cilindro/sector, como
 ; exigido pela INT 0x13/AH=2:
@@ -200,45 +178,6 @@ chs_cylinder_sector_encode:
   or    cl,al             ; mistura CL com AL.
   ret
 
-;----------------------------
-; O setor de boot tem que sempre termiar com os bytes 0x55 e 0xAA
-; senão a BIOS não carregarã esse setor.
-;
-; O preenchimento do final do arquivo com zeros até a posição 510
-; nos garante que esses dois bytes serão sempre colocados no final
-; do setor (que tem 512 bytes) e também servem para nos dizer se
-; nossos códigos e dados consumiram mais que os 510 bytes permitidos.
-;----------------------------
   times 510 - ($ - $$) db 0
-magic:
-  db  0x55, 0xaa
-;******************************************************************************
-;--------------------
-; O codigo e dados contidos no restante dessa listagem pertencem aos
-; setores adjacentes ao MBR...
-;--------------------
-
-loader:         ; Início do loader.
-
-; Coloquei o loader num arquivo separado porque:
-; 1. Um pequeno pedaço é em modo real e...
-; 2. Um outro pedaço é em modo protegido.
-%include "loader.asm"
-
-;----------------------------
-; Mesmo artifício usado para o final do setor de boot,
-; Só que, agora, garante que nosso arquivo terá tamanho exato de múltiplos de 
-; 512 bytes.
-;----------------------------
-  times 510 - (($ - $$) % 512) db 0
-loader_cksum: dw    0     ; Apenas um checksum para determinar se
-                          ; o código do MBR conseguiu ler todos os setores
-                          ; corretamente. Vai ser preenchido por um utilitário
-                          ; externo depois...
-
-; Quero que esse loader (mais o bootsector) tenham, no máximo, 8 kB.
-; Ou seja, 16 setores.
-%if ($ - $$) > 8192
-  %error "Loader muito grande!"
-%endif
-_end:           ; Fim do loader.
+_magic:
+  db    0x55, 0xaa

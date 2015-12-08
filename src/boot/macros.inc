@@ -1,3 +1,5 @@
+%define _PTR(x) ((x) + (_MBRSEG << 4))
+
 ; Monta uma entrada na GDT.
 ; Parâmetros: BASE[31:0], LIMIT[19:0], ATTRIB[11:0]
 %macro GDT_ENTRY 3
