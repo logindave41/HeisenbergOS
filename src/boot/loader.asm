@@ -22,7 +22,8 @@ error_enabling_a20_str:
 ; Estruturas usadas por LGDT, LIDT (e LTR?).
 ;--------------------------
 gdtptr:
-  dw    gdt_end - gdt - 1 ; Tamanho da tabela (aparentemente é necessário esse -1 no final!).
+  dw    gdt_end - gdt - 1 ; Tamanho da tabela (aparentemente é necessário esse 
+                          ; -1 no final!).
   dd    _PTR(gdt)         ; Endereço físico da tabela.
 
 ; Por enquanto não criei ainda uma tabela de vetores interrupção!
@@ -41,19 +42,24 @@ gdt:
 
   ; Um TSS é necessário para a inicialização do modo protegido,
 tss_entry:
-  GDT_ENTRY 0,TSS_LENGTH,0x892    ; Segmento pequenininho (bit de granulidade desligado!)
-  ;*** Possívelmente terei que colocar entradas para o Userspace (ainda não "presentes").
+  GDT_ENTRY 0,TSS_LENGTH-1,0x48b    ; Segmento pequenininho (bit de granulidade 
+                                    ; desligado!). Note que este é um segmento
+                                    ; de sistema (TSS Busy).
+                                    ; O limite superior é o final do TSS.
+
+  ;*** Possívelmente terei que colocar entradas para o Userspace
+  ;*** (ainda não "presentes"). Pode ser que o kernel tome conta disso.
 gdt_end:
 
-  ; Não tem nenhum problema em ter um TSS vazio aqui. Não faremos nenhum task switch
-  ; então o processador não mexe com essa estrutura.
+  ; Não tem nenhum problema em ter um TSS vazio aqui. Não faremos nenhum task 
+  ; switch então o processador não mexe com essa estrutura.
   align 16, db 0
 tss:
   times 102 db 0
-        dw  iomap-tss   ; IOmap offset.
+        dw  iomap - tss   ; IOmap offset.
   ; Não tenho certeza se um IO map é realmente necessário!!
 iomap:
-  times 32 db 0xff      ; IOmap.
+        times 32 db 0xff  ; IOmap.
   
 ;=====================
 section .ltext
@@ -129,7 +135,8 @@ testA20:
   mov   ds,cx       ; Recupera DS.
 
   jz    prepare_protected_mode        ; Se o teste foi ok, salta para a rotina
-                                      ; que coloca o processador em modo protegido.
+                                      ; que coloca o processador em modo 
+                                      ; protegido.
 
   ; Erro ao testar o gate A20...
   mov   si,error_enabling_a20_str
@@ -144,8 +151,8 @@ prepare_protected_mode:
   cli
 
   ;-------
-  ; Saltar para o modo protegido é um passo crítico. NENHUMA interrupção pode acontecer.
-  ; daí temos que desabilitar a NMI.
+  ; Saltar para o modo protegido é um passo crítico. NENHUMA interrupção pode 
+  ; acontecer. Daí temos que desabilitar a NMI.
   ;-------
   in    al,0x70
   or    al,0b10000000
@@ -169,9 +176,11 @@ prepare_protected_mode:
   mov   word [tss_entry+2],_PTR(tss)
   mov   ax,_TSSSEG
 
-  ; Agora podemos carregar os registradores das tabelas de descritores...
+  ; Agora podemos carregar os registradores das tabelas de descritores
+  ; e o task register.
   lgdt  [gdtptr]
   lidt  [idtptr]
+  ;lldt [idtptr]      ; Será necessário carregar o LDTR para uma tabela nula?
   ltr   ax
   
   ; Habilita o bit PE de CR0.
@@ -210,4 +219,4 @@ protected_mode_entry:
                         ; memória inferior! Voltei a colocar ESP em 0x9bffc!
 
   ; Este é um jmp "short"! Não precisa ajustar o ponteiro! :)
-  jmp   main            ; salta para a rotina em C. "main" não retornará jamais...
+  jmp   main            ; salta para a rotina em C. "main" não retornará jamais.
