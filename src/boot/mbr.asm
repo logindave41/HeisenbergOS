@@ -80,7 +80,7 @@ boot_start:
   cli                 ; desabilita interrupções.
   mov   ax,_STKSEG
   mov   ss,ax
-  mov   sp,0xfffc     ; SS:SP = 0x9fffc, pouco antes da memória de vídeo.
+  mov   sp,_STK16PTR  ; SS:SP = 0x9fffc, pouco antes da memória de vídeo.
   sti                 ; habilita interrupções.
 
 ;----------------------------

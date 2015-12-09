@@ -26,7 +26,10 @@ void __attribute__((noinline,regparm(2))) gotoxy(unsigned char x, unsigned char 
 
 void __attribute__((noinline)) scroll_up(void)
 {
-  memcpy(VIDEO_BUFFER_PTR, VIDEO_PTR(0,1), (SCREEN_HEIGHT - 1)*SCREEN_WIDTH*2);
+  void *srcptr, *destptr;
+
+  destptr = (srcptr = VIDEO_BUFFER_PTR) + SCREEN_WIDTH*2;
+  memcpy(destptr, srcptr, (SCREEN_HEIGHT - 1)*SCREEN_WIDTH*2);
   memsetw(VIDEO_PTR(0,24), ((unsigned short)UCHAR_VAR(screen_attrib) << 8) | ' ', SCREEN_WIDTH);
 }
 
@@ -119,15 +122,22 @@ void __attribute__((noinline,regparm(1))) putch(unsigned char c)
 unsigned short __attribute__((regparm(1))) select_hdc(unsigned char drive_no)
 {
   if (drive_no >= 0x80)
+  {
+    unsigned short port;
+
     switch (drive_no & 3)
     {
       case 0:
-      case 1: return HDD0_BASE_PORT;
-
+      case 1:
+        port = HDC0_BASE_PORT;
+        break;
       case 2:
-      case 3: return HDD1_BASE_PORT;
+      case 3:
+        port = HDC1_BASE_PORT;
     }
 
+    return port;
+  }
   return 0;
 }
 
