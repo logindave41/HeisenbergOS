@@ -16,14 +16,6 @@ SECTIONS {
   .rodata : { *(.rodata) }
   _end = .;
 
-  /* Só está aqui para colocar o símbolo _cksum no final do setor. */
-  .unused : { 
-    *(.unused)
-    . += (510 - (. % 512));
-    _cksum = .;
-    SHORT(0xffff)
-  }
-
   _bss_start = .;
   .bss : { *(.bss) }
   _bss_end = .;

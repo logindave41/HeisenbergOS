@@ -14,3 +14,6 @@ objectfiles=mbr.o loader.o main.o
 .PHONY: clean
 clean:
 	rm *.o
+
+distclean: clean
+	rm ../../bin/mbr.bin

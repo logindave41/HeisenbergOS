@@ -160,12 +160,14 @@ halt:
 
   ; Se conseguiu ler os outros setores, testa o checksum...
 disk_read_ok:
-  mov   si,_loader_start
-  mov   cx,_end
-  sub   cx,si
-  call  calc_cksum
-  and   ax,[_cksum]
-  jnz   error_loading_loader      ; Se o checksum está errado, pára tudo!
+;--- código retirado provisóriamente.
+;  mov   si,_loader_start
+;  mov   cx,_end
+;  sub   cx,si
+;  call  calc_cksum
+;  and   ax,[_cksum]
+;  jnz   error_loading_loader      ; Se o checksum está errado, pára tudo!
+;----
   jmp   loader                    ; senão, salta para o loader.
 
 ;----------------------------
@@ -203,22 +205,23 @@ chs_cylinder_sector_encode:
   or    cl,al             ; mistura CL com AL.
   ret
 
-;-----------------------------
-; Calcula o checksum de um bloco e retorna o inverso dele.
-; Entrada: DS:SI aponta para o início do bloco.
-;          CX tem o tamanho do bloco.
-; Saída: AX
-; Destrói CX e DX.
-;-----------------------------
-calc_cksum:
-  xor   ax,ax
-  xor   dx,dx
-.loop:
-  lodsb
-  add   dx,ax
-  adc   dx,0
-  dec   cx
-  jnz   .loop
-  not   dx
-  mov   ax,dx
-  ret  
+;--- código retirado provisóriamente.
+;;-----------------------------
+;; Calcula o checksum de um bloco e retorna o inverso dele.
+;; Entrada: DS:SI aponta para o início do bloco.
+;;          CX tem o tamanho do bloco.
+;; Saída: AX
+;; Destrói CX e DX.
+;;-----------------------------
+;calc_cksum:
+;  xor   ax,ax
+;  xor   dx,dx
+;.loop:
+;  lodsb
+;  add   dx,ax
+;  adc   dx,0
+;  dec   cx
+;  jnz   .loop
+;  not   dx
+;  mov   ax,dx
+;  ret  
