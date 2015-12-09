@@ -38,10 +38,23 @@ gdt:
   GDT_ENTRY 0,0,0               ; Null descriptor
   GDT_ENTRY 0,0xfffff,0xc9a     ; Kernel Codeseg descriptor
   GDT_ENTRY 0,0xfffff,0xc92     ; Kernel Dataseg descriptor
-  ;*** Possívelmente terei que colocar um TSS aqui.
+
+  ; Um TSS é necessário para a inicialização do modo protegido,
+tss_entry:
+  GDT_ENTRY 0,TSS_LENGTH,0x892    ; Segmento pequenininho (bit de granulidade desligado!)
   ;*** Possívelmente terei que colocar entradas para o Userspace (ainda não "presentes").
 gdt_end:
 
+  ; Não tem nenhum problema em ter um TSS vazio aqui. Não faremos nenhum task switch
+  ; então o processador não mexe com essa estrutura.
+  align 16, db 0
+tss:
+  times 102 db 0
+        dw  iomap-tss   ; IOmap offset.
+  ; Não tenho certeza se um IO map é realmente necessário!!
+iomap:
+  times 32 db 0xff      ; IOmap.
+  
 ;=====================
 section .ltext
 
@@ -152,12 +165,14 @@ prepare_protected_mode:
   ; IRQs de novo no código do kernel.
   ;--------
 
+  ; Ajusta a base do descritor da TSS:
+  mov   word [tss_entry+2],_PTR(tss)
+  mov   ax,_TSSSEG
+
   ; Agora podemos carregar os registradores das tabelas de descritores...
   lgdt  [gdtptr]
   lidt  [idtptr]
-
-  ;*** É necessário carregar o Task Register com um TSS válido aqui?
-  ;*** A documentação da Intel diz que sim!
+  ltr   ax
   
   ; Habilita o bit PE de CR0.
   mov   eax,cr0
@@ -191,8 +206,8 @@ protected_mode_entry:
   mov   fs,ax
   mov   gs,ax
   mov   ss,ax
-  mov   esp,0x9fffc     ; Continuamos com SS:ESP apontando para uma pilha na
-                        ; memória inferior! Voltei a colocar ESP em 0x9fffc!
+  mov   esp,_STK32PTR   ; Continuamos com SS:ESP apontando para uma pilha na
+                        ; memória inferior! Voltei a colocar ESP em 0x9bffc!
 
   ; Este é um jmp "short"! Não precisa ajustar o ponteiro! :)
   jmp   main            ; salta para a rotina em C. "main" não retornará jamais...
