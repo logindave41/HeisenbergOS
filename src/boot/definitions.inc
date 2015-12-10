@@ -8,9 +8,15 @@
 %define _MBRSEG   0x0060
 %define _STKSEG   0x9000
 
+;-----------------------
+; Stack pointer, em modo 16 e 32 bits.
+;-----------------------
 %define _STK16PTR 0xbffc
 %define _STK32PTR 0x9bffc
 
+;-----------------------
+; Seletores, em modo protegido.
+;-----------------------
 ; Índice 1, GDT e RPL=0
 %define _CODE32SEG 0b00001000
 
@@ -20,9 +26,15 @@
 ; Índice 3, GDT e RPL=0 (G=0)
 %define _TSSSEG   0b00011000
 
+;-----------------------
+; Endereço linear do inicio do kernel.
+;-----------------------
 %define _KERNEL_BASE_ADDRESS 0x100000
 
+;-----------------------
+; Tamanho do TSS.
 ; TSS tem 104 bytes + 32 bytes de I/O map.
+;-----------------------
 %define TSS_LENGTH  (104+32)
 
 %endif

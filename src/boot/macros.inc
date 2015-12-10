@@ -1,9 +1,12 @@
 %ifndef __MACROS_INCLUDED__
 %define __MACROS_INCLUDED__
 
-; Usado para calcular um endereço linear, em modo protegido.
+;--------------------------------
+; Macro usado para calcular o endereço linear em modo protegido.
+;--------------------------------
 %define _PTR(x) ((x) + (_MBRSEG << 4))
 
+;---------------------------------
 ; Monta uma entrada na GDT.
 ; Parâmetros: BASE[31:0], LIMIT[19:0], ATTRIB[11:0]
 ;
@@ -15,6 +18,7 @@
 ; de medida do limite é em blocos de 4 kB (1 página). Assim, um limite de
 ; 0xfffff equivale a deslocar o limite 12 bits para a esquerda preenchendo
 ; os bits à direita com 1. O limite, neste caso, será 0xffffffff.
+;---------------------------------
 %macro GDT_ENTRY 3
   dw  (%2) & 0xffff
   dw  (%1) & 0xffff

@@ -17,13 +17,15 @@ bits 16
 
 %include "definitions.inc"
 
-;===================
+;========================================================================
+; Segmento de dados no bloco do BOOT SECTOR.
+;========================================================================
 section .bdata
 
           ; Temos essa assinatura aqui porque alguns valores serão
           ; preenchidos por um utilitário externo. Precisamos dela
           ; para localizar esses valores no arquivo binário...
-          dd  0x0B16B00B5   ; Ahhh "peitões"! :)
+          db  "HSENBERG"  ; 
 
           ; Os números do cilindro, cabeça e setor serão colocados
           ; nessas posições por um utilitário externo.
@@ -44,6 +46,9 @@ num_sectors_after_mbr:  db  0
 loading_str:            db  "Loading Heisenberg OS...",13,10,0
 disk_read_error_str:    db  "Error reading loader. System halted!", 13, 10, 0
 
+;========================================================================
+; Segmento de código no bloco do BOOT SECTOR.
+;========================================================================
 section .btext 
 
 ; Símbolos definidos pelo linker ou pelo loader.asm.
@@ -70,7 +75,7 @@ _start:
 boot_start:
   ; Ajusta o seletor DS.
   ; Faço DS ser o mesmo que CS para facilitar o acesso aos dados.
-  ; Usa a pilha da BIOS!
+  ; Usa a pilha da BIOS! PUSH e POP ocupam menos espaço que dois MOV.
   push  cs
   pop   ds
 
@@ -119,10 +124,10 @@ mbr_real_start:
   ; Calcula o número de setores do loader.
   mov   ax,_end
   sub   ax,_loader_start
-  cwd
+  cwd                   ; AX -> DX:AX
   mov   bx,512
-  div   bx
-  or    dx,dx
+  div   bx              ; AX = DX:AX / BX. DX = DX:AX % BX.
+  test  dx,dx
   jz    .no_more_sectors
   inc   ax
 .no_more_sectors:
@@ -132,37 +137,30 @@ mbr_real_start:
   mov   si,loading_str
   call  puts
 
+  ;--------------
   ; Usa a BIOS para carregar o loader...
-  ; É necessário adequar o valor de CX em conformidade com INT 0x13/AH=2.
-  mov   bx,_loader_start
-  call  chs_cylinder_sector_encode
+  ;--------------
+  mov   bx,_loader_start  ; ES:BX aponta para o endereço onde os setores serão
+                          ; colocados.
+
+  ; Codifica CX de acordo com o padrão exigido por INT 0x13 (CHS).
+  mov   cx,[cylinder]
+  and   cx,0x3ff          ; Zera bits superiores de CX.
+  rol   cx,8              ; CL contém parte superior e CH a inferior.
+  rol   cl,6              ; Coloca os 2 bits superiores do cilindro na parte 
+                          ; superior de CL.
+  mov   al,[sector]
+  and   al,0x1f           ; Zera a parte superior do setor.
+  or    cl,al             ; mistura CL com AL.
+
   mov   al,[num_sectors_after_mbr]
   mov   dh,[head]
   mov   dl,[drive_no]
-  int   0x13
-  jnc   disk_read_ok                ; Se não houveram erros...
+  int   0x13              ; Finalmente, lê os setores.
+  jc    error_loading_loader  ; Se houve erro...
 
-  ; Houve um erro, mostra mensagem e paraliza o processador.
-  ; OBS: A especificação da INT 0x19 nos diz que podemos fazer um
-  ; retorno "far", deixando a BIOS decidir se tenta bootar pelo próximo
-  ; dispositivo. Escolhi não permitir isso!
-error_loading_loader:
-  mov   si,disk_read_error_str
-  call  puts
-
-  ; Pára tudo e deixa parado (mesmo se ouver uma interrupção!).
-  ; Note que exportei o símbolo halt, que também é usado pelo loader.asm.
-global  halt
-halt:
-  cli           ; Desabilita interrupções.
-  hlt
-  jmp   halt    ; Isto é apenas uma precaução... HLT "pára" o processador,
-                ; mas uma interrupção NMI pode tirá-lo desse estado de
-                ; "sonolência"... Não quero ter que mascarar NMIs aqui, agora.
-
-  ; Se conseguiu ler os outros setores, testa o checksum...
-disk_read_ok:
 ;--- código retirado provisóriamente.
+;  ; Se conseguiu ler os outros setores, testa o checksum...
 ;  mov   si,_loader_start
 ;  mov   cx,_end
 ;  sub   cx,si
@@ -181,6 +179,27 @@ disk_read_ok:
   ; E, finalmente, salta para o loader.
   jmp   loader                    
 
+  ;-------------------
+  ; Houve um erro na carga do loader. Mostra mensagem e paraliza o processador.
+  ; OBS: A especificação da INT 0x19 nos diz que podemos fazer um
+  ; retorno "far", deixando a BIOS decidir se tenta bootar pelo próximo
+  ; dispositivo. Escolhi não permitir isso!
+  ;-------------------
+error_loading_loader:
+  mov   si,disk_read_error_str
+  call  puts
+
+  ; Pára tudo e deixa parado (mesmo se ouver uma interrupção!).
+  ; Note que exportei o símbolo halt, que também é usado pelo loader.asm.
+global  halt
+halt:
+  cli           ; Desabilita interrupções.
+  hlt
+  jmp   halt    ; Isto é apenas uma precaução... HLT "pára" o processador,
+                ; mas uma interrupção NMI pode tirá-lo desse estado de
+                ; "sonolência"... Não quero ter que mascarar NMIs aqui, agora.
+
+
 ;----------------------------
 ; Rotina auxiliar em modo real, usando a BIOS.
 ; puts
@@ -196,24 +215,6 @@ puts:
   int   0x10
   jmp   puts
 .puts_end:
-  ret
-  
-;----------------------------
-; Rotina auxiliar: Monta, em CX o par cilindro/sector, como
-; exigido pela INT 0x13/AH=2:
-; Entrada: <nenhuma>
-; Saída: CX
-; Destrói AL.
-;----------------------------
-chs_cylinder_sector_encode:
-  mov   cx,[cylinder]
-  and   cx,0x3ff          ; Zera bits superiores de CX.
-  rol   cx,8              ; CL contém parte superior e CH a inferior.
-  rol   cl,6              ; Coloca os 2 bits superiores do cilindro na parte 
-                          ; superior de CL.
-  mov   al,[sector]
-  and   al,0x1f           ; Zera a parte superior do setor.
-  or    cl,al             ; mistura CL com AL.
   ret
 
 ;--- código retirado provisóriamente.
