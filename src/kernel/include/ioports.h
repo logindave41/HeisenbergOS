@@ -1,7 +1,7 @@
 #ifndef __IOPORTS_INCLUDED__
 #define __IOPORTS_INCLUDED__
 
-void inline outb(unsigned short port, unsigned char data)
+void inline outportb(unsigned short port, unsigned char data)
 {
   __asm__ __volatile__ (
     "outb %%al,%0"
@@ -9,7 +9,7 @@ void inline outb(unsigned short port, unsigned char data)
       );
 }
 
-void inline outw(unsigned short port, unsigned short data)
+void inline outportw(unsigned short port, unsigned short data)
 {
   __asm__ __volatile__ (
     "outw %%ax,%0"
@@ -17,7 +17,7 @@ void inline outw(unsigned short port, unsigned short data)
       );
 }
 
-unsigned char inline inb(unsigned short port)
+unsigned char inline inportb(unsigned short port)
 {
   unsigned char tmp;
 
@@ -29,7 +29,7 @@ unsigned char inline inb(unsigned short port)
   return tmp; 
 }
 
-unsigned short inline inw(unsigned short port)
+unsigned short inline inportw(unsigned short port)
 { 
   unsigned short tmp;
 

@@ -33,6 +33,8 @@ void __attribute__((noinline)) scroll_up(void)
   memsetw(VIDEO_PTR(0,24), ((unsigned short)UCHAR_VAR(screen_attrib) << 8) | ' ', SCREEN_WIDTH);
 }
 
+/* Não são necessarias para o boot! */
+#if 0
 void __attribute__((regparm(1))) settext_attribute(unsigned char attrib)
 {
   UCHAR_VAR(screen_attrib) = attrib;
@@ -50,6 +52,7 @@ void __attribute__((noinline)) clearscreen(void)
           SCREEN_WIDTH*SCREEN_HEIGHT);
   gotoxy(0,0);
 }
+#endif
 
 void __attribute__((noinline,regparm(1))) putch(unsigned char c)
 {
@@ -146,18 +149,18 @@ void __attribute__((regparm(3))) read_sectors(unsigned char drive_no,
   port = select_hdc(drive_no);
   buffer_size = sectors * 512;
   
-  outb(HDC_DRIVE_HEAD_PORT(port), 
-      inb(HDC_DRIVE_HEAD_PORT(port)) | 0xe0 | 
+  outportb(HDC_DRIVE_HEAD_PORT(port), 
+      inportb(HDC_DRIVE_HEAD_PORT(port)) | 0xe0 | 
         ((drive_no & 1) << 4) |
         ((lba >> 24) & 0x0f));
 
-  outb(HDC_SECTOR_COUNT_PORT(port), sectors);
-  outb(HDC_SECTOR_PORT(port), lba & 0xff);
-  outb(HDC_CYLINDER_LOW_PORT(port), (lba >> 8) & 0xff);
-  outb(HDC_CYLINDER_HI_PORT(port), (lba >> 16) & 0xff);
+  outportb(HDC_SECTOR_COUNT_PORT(port), sectors);
+  outportb(HDC_SECTOR_PORT(port), lba & 0xff);
+  outportb(HDC_CYLINDER_LOW_PORT(port), (lba >> 8) & 0xff);
+  outportb(HDC_CYLINDER_HI_PORT(port), (lba >> 16) & 0xff);
 
-  outb(HDC_COMMAND_PORT(port), HDD_CMD_READRETRY);
-  while ((inb(HDC_STATUS_PORT(port)) & 0x08) == 0);
+  outportb(HDC_COMMAND_PORT(port), HDD_CMD_READRETRY);
+  while ((inportb(HDC_STATUS_PORT(port)) & 0x08) == 0);
 
   /* Lê o bloco de dados para o buffer. */
   __asm__ __volatile__ (
