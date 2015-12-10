@@ -90,22 +90,8 @@ void __attribute__((noinline,regparm(1))) putch(unsigned char c)
  * Função para leitura de setores do disco.
  * Usa PIO-ATA, sem uso de UDMA ou IRQs, fazendo pooling. 
  *********************************************/
-#define HDD_DRIVE_HEAD_MASK     0xA0
-#define HDD_DRIVE_HEAD_LBA      0x40
-#define HDD_DRIVE_HEAD_DISK0    0x00
-#define HDD_DRIVE_HEAD_DISK1    0x10
-#define HDD_DRIVE_HEAD_HMASK    0x0f
-
-#define HDD_STATUS_EXECUTING    0x80
-#define HDD_STATUS_DRIVEREADY   0x40
-#define HDD_STATUS_WRITEFAULT   0x20
-#define HDD_STATUS_SEEKCOMPLETE 0x10
-#define HDD_STATUS_SECTBUFFERR  0x08
-#define HDD_STATUS_READCORRECTED 0x04
-#define HDD_STATUS_INDEX        0x02
-#define HDD_STATUS_CMDERROR     0x01
-
-#define HDD_CMD_READWORETRY     0x21
+#define HDD_CMD_READRETRY       0x20
+#define HDD_CMD_READNORETRY     0x21
 
 #define HDC0_BASE_PORT          0x1f0
 #define HDC1_BASE_PORT          0x170
@@ -117,9 +103,10 @@ void __attribute__((noinline,regparm(1))) putch(unsigned char c)
 #define HDC_CYLINDER_LOW_PORT(x)  ((x) + 4)
 #define HDC_CYLINDER_HI_PORT(x)   ((x) + 5)
 #define HDC_DRIVE_HEAD_PORT(x)    ((x) + 6)
+#define HDC_COMMAND_PORT(x)       ((x) + 7)
 #define HDC_STATUS_PORT(x)        ((x) + 7)
 
-unsigned short __attribute__((regparm(1))) select_hdc(unsigned char drive_no)
+static unsigned short __attribute__((noinline)) select_hdc(unsigned char drive_no)
 {
   if (drive_no >= 0x80)
   {
@@ -141,12 +128,15 @@ unsigned short __attribute__((regparm(1))) select_hdc(unsigned char drive_no)
   return 0;
 }
 
+/* --- Isso está certo? */
+#define CHS2LBA(c,h,s,nheads,nsectors) (((c)*(nheads)+(h)) * (nsectors) + ((s) - 1))
+
+/* Lê setores usando LBA28. */
 void __attribute__((regparm(3))) read_sectors(unsigned char drive_no, 
-                                              void *buffer,   /* Normalizado! */
-                                              unsigned short cylinder, 
-                                              unsigned char sector,
-                                              unsigned char head,
-                                              unsigned char sectors)
+                                              unsigned long lba,
+                                              unsigned char sectors,
+                                              void *buffer)   /* Normalizado! */
+
 {
   unsigned short port;
   unsigned int buffer_size;
@@ -154,5 +144,24 @@ void __attribute__((regparm(3))) read_sectors(unsigned char drive_no,
   port = select_hdc(drive_no);
   buffer_size = sectors * 512;
   
-  /* Continua aqui */
+  outb(HDC_DRIVE_HEAD_PORT(port), 
+      inb(HDC_DRIVE_HEAD_PORT(port)) | 0xe0 | 
+        ((drive_no & 1) << 4) |
+        ((lba >> 24) & 0x0f));
+
+  outb(HDC_SECTOR_COUNT_PORT(port), sectors);
+  outb(HDC_SECTOR_PORT(port), lba & 0xff);
+  outb(HDC_CYLINDER_LOW_PORT(port), (lba >> 8) & 0xff);
+  outb(HDC_CYLINDER_HI_PORT(port), (lba >> 16) & 0xff);
+
+  outb(HDC_COMMAND_PORT(port), HDD_CMD_READRETRY);
+  while ((inb(HDC_STATUS_PORT(port)) & 0x08) == 0);
+
+  /* Lê o bloco de dados para o buffer. */
+  __asm__ __volatile__ (
+    "rep; insw"
+    : 
+    : "c" (buffer_size / 2), "d" (HDC_DATA_PORT(port)), "D" (buffer) 
+    : "memory"
+      );
 }
