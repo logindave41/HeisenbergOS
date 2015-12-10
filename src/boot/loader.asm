@@ -17,6 +17,8 @@ section .ldata
 
 error_enabling_a20_str:
   db    "Error enabling gate A20!", 13, 10, 0
+error_loading_kernel_str:
+  db    "Error loading kernel!", 13, 10, 0
 
 ;--------------------------
 ; Estruturas usadas por LGDT, LIDT (e LTR?).
@@ -67,6 +69,7 @@ section .ltext
 ; Funções externas a esse módulo.
 extern main
 extern puts
+extern _puts  ; Protected-mode.
 extern halt
 
 ; "loader" é importado pelo mbr.asm.
@@ -218,5 +221,15 @@ protected_mode_entry:
   mov   esp,_STK32PTR   ; Continuamos com SS:ESP apontando para uma pilha na
                         ; memória inferior! Voltei a colocar ESP em 0x9bffc!
 
-  ; Este é um jmp "short"! Não precisa ajustar o ponteiro! :)
-  jmp   main            ; salta para a rotina em C. "main" não retornará jamais.
+  ; main() retorna, depois de fazer tudo o que tem que fazer...
+  call  main
+  or    eax,eax
+  jz    .run_kernel
+
+  mov   eax,_PTR(error_loading_kernel_str)
+  call  _puts
+
+.run_kernel:
+  ; Salta para o código do kernel.
+  push  dword _KERNEL_BASE_ADDRESS
+  ret

@@ -86,6 +86,8 @@ void __attribute__((noinline,regparm(1))) putch(unsigned char c)
   UCHAR_VAR(screen_y) = sy;
 }
 
+void __attribute__((regparm(1))) _puts(char *s) { for (;*s;s++) putch(*s); }
+
 /******************************************** 
  * Função para leitura de setores do disco.
  * Usa PIO-ATA, sem uso de UDMA ou IRQs, fazendo pooling. 
