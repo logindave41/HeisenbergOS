@@ -13,20 +13,21 @@ bits 16
 extern _bss_start
 extern _bss_end
 
-section .ldata
+section .bdata
 
 error_enabling_a20_str:
   db    "Error enabling gate A20!", 13, 10, 0
 error_loading_kernel_str:
   db    "Error loading kernel!", 13, 10, 0
 
+section .ldata
 ;--------------------------
 ; Estruturas usadas por LGDT, LIDT (e LTR?).
 ;--------------------------
 gdtptr:
   dw    gdt_end - gdt - 1 ; Tamanho da tabela (aparentemente é necessário esse 
                           ; -1 no final!).
-  dd    _PTR(gdt)         ; Endereço físico da tabela.
+  dd    _PTR(gdt)         ; Endereço linear da tabela.
 
 ; Por enquanto não criei ainda uma tabela de vetores interrupção!
 idtptr:
@@ -35,6 +36,8 @@ idtptr:
 
 ;--------------------------
 ; Tabela de descritores globais simples.
+; OBS: Tenho que verificar se a alocação em runtime dessa
+;      tabela é vantajosa ou não (para reduzir o tamanho do binário!).
 ;--------------------------
   align 16,db 0
 gdt:
@@ -48,41 +51,11 @@ tss_entry:
                                     ; desligado!). Note que este é um segmento
                                     ; de sistema (TSS Busy).
                                     ; O limite superior é o final do TSS.
-
-  ;*** Possívelmente terei que colocar entradas para o Userspace
-  ;*** (ainda não "presentes"). Pode ser que o kernel tome conta disso.
 gdt_end:
 
-  ; Não tem nenhum problema em ter um TSS vazio aqui. Não faremos nenhum task 
-  ; switch então o processador não mexe com essa estrutura.
-  align 16, db 0
-tss:
-  times 102 db 0
-        dw  iomap - tss   ; IOmap offset.
-  ; Não tenho certeza se um IO map é realmente necessário!!
-iomap:
-        times 32 db 0xff  ; IOmap.
-  
-;=====================
-section .ltext
+  ; Movi o TSS para além do segmento .bss.
 
-; Funções externas a esse módulo.
-extern main
-extern puts
-extern _puts  ; Protected-mode.
-extern halt
-
-; "loader" é importado pelo mbr.asm.
-global loader
-loader:
-  ; Zera todo o segmento .bss
-  mov   ax,ds
-  mov   es,ax
-  mov   edi,_bss_start
-  mov   ecx,_bss_end
-  sub   ecx,edi
-  xor   al,al
-  rep   stosb
+section .btext
 
 ;------------------------
 ; Antes de entrarmos no modo protegido precisamos ligar o
@@ -92,7 +65,7 @@ enableA20:
   ; Tenta usar a BIOS (pode ser que isso só funcione no PS/2):
   mov ax,0x2401
   int 0x15
-  jnc testA20       ; Se conseguiu, testa!
+  jnc .testA20       ; Se conseguiu, testa!
 
   ; Se não conseguiu tenta usar o modo "fast".
   in  al,0x92
@@ -104,7 +77,7 @@ enableA20:
 ;--------------------------
 ; Testa se o gateA20 foi habilitado.
 ;--------------------------
-testA20:
+.testA20:
   mov   cx,ds       ; Guarda DS.
 
   xor   ax,ax
@@ -136,27 +109,9 @@ testA20:
   mov   [si],bl
 
   mov   ds,cx       ; Recupera DS.
+  ret
 
-  jz    prepare_protected_mode        ; Se o teste foi ok, salta para a rotina
-                                      ; que coloca o processador em modo 
-                                      ; protegido.
-
-  ; Erro ao testar o gate A20...
-  mov   si,error_enabling_a20_str
-  call  puts
-  jmp   halt
-
-;------------------------
-; Prepara o ambiente para entrarmos
-; no modo protegido. Esse pedaço ainda é prelimiar!
-;------------------------
-prepare_protected_mode:
-  cli
-
-  ;-------
-  ; Saltar para o modo protegido é um passo crítico. NENHUMA interrupção pode 
-  ; acontecer. Daí temos que desabilitar a NMI.
-  ;-------
+disable_interrupts:
   in    al,0x70
   or    al,0b10000000
   out   0x70,al         ; desabilita NMI
@@ -170,20 +125,76 @@ prepare_protected_mode:
   ; E também pelo PIC2.
   xor   al,al
   out   0xa1,al
+  ret
+
+error_enabling_a20:
+  ; Erro ao testar o gate A20...
+  mov   si,error_enabling_a20_str
+  call  puts
+  jmp   halt
+
+create_tss:
+  ;-------
+  ; Cria TSS no final da imagem
+  ;-------
+  mov   di,_bss_end   ; Alinha por 16 bytes.
+  add   di,15
+  and   di,0x0f      
+
+  ; Ajusta a base do descritor da TSS:
+  mov   word [tss_entry+2],di
+  ; Preenche o TSS.
+  xor   ax,ax
+  mov   cx,52   ; 104/2.
+  rep   stosw
+  dec   al
+  mov   cl,32
+  rep   stosb
+  ret
+
+;=====================
+section .ltext
+
+; Funções externas a esse módulo.
+extern main
+extern puts
+extern _puts  ; Protected-mode.
+extern halt
+
+; "loader" é importado pelo mbr.asm.
+global loader
+loader:
+  call  enableA20
+
+  jnz   error_enabling_a20            ; Se o teste foi ok, salta para a rotina
+                                      ; que coloca o processador em modo 
+                                      ; protegido.
+
+;------------------------
+; Prepara o ambiente para entrarmos
+; no modo protegido. Esse pedaço ainda é prelimiar!
+;------------------------
+  cli
+
+  ; Cria TSS.
+  call  create_tss
+
+  ;-------
+  ; Saltar para o modo protegido é um passo crítico. NENHUMA interrupção pode 
+  ; acontecer. Daí temos que desabilitar a NMI.
+  ;-------
+  call  disable_interrupts
 
   ; Note que não guardei as máscaras anteriores. Só vamos configurar as
   ; IRQs de novo no código do kernel.
   ;--------
-
-  ; Ajusta a base do descritor da TSS:
-  mov   word [tss_entry+2],_PTR(tss)
-  mov   ax,_TSSSEG
 
   ; Agora podemos carregar os registradores das tabelas de descritores
   ; e o task register.
   lgdt  [gdtptr]
   lidt  [idtptr]
   ;lldt [idtptr]      ; Será necessário carregar o LDTR para uma tabela nula?
+  mov   ax,_TSSSEG
   ltr   ax
   
   ; Habilita o bit PE de CR0.
@@ -209,7 +220,6 @@ prepare_protected_mode:
 ;------------------------
 bits 32
 
-  align 16
 protected_mode_entry:
   ; ajusta os seletores: DS=ES=FS=GS=SS=DATA32SEG
   mov   eax,_DATA32SEG

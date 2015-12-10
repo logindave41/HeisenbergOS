@@ -51,6 +51,8 @@ extern _loader_start
 extern _end
 extern loader
 extern _cksum
+extern _bss_start
+extern _bss_end
 
 ;----------------------------
 ; Quando a BIOS carrega a MBR ela o coloca no endereço 0x0000:0x7c00.
@@ -168,7 +170,16 @@ disk_read_ok:
 ;  and   ax,[_cksum]
 ;  jnz   error_loading_loader      ; Se o checksum está errado, pára tudo!
 ;----
-  jmp   loader                    ; senão, salta para o loader.
+
+  ; Zera todo o segmento .bss
+  mov   di,_bss_start
+  xor   al,al
+  mov   cx,_bss_end
+  sub   cx,di
+  rep   stosb
+
+  ; E, finalmente, salta para o loader.
+  jmp   loader                    
 
 ;----------------------------
 ; Rotina auxiliar em modo real, usando a BIOS.
@@ -224,4 +235,5 @@ chs_cylinder_sector_encode:
 ;  jnz   .loop
 ;  not   dx
 ;  mov   ax,dx
-;  ret  
+;  ret
+

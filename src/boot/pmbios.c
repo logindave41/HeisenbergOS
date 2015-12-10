@@ -89,7 +89,7 @@ void __attribute__((noinline,regparm(1))) putch(unsigned char c)
   UCHAR_VAR(screen_y) = sy;
 }
 
-void __attribute__((regparm(1))) _puts(char *s) { for (;*s;s++) putch(*s); }
+void __attribute__((noinline, regparm(1))) _puts(char *s) { for (;*s;s++) putch(*s); }
 
 /******************************************** 
  * Função para leitura de setores do disco.
@@ -117,49 +117,48 @@ static unsigned short select_hdc(unsigned char drive_no)
   {
     register unsigned short port;
 
-    switch (drive_no & 3)
-    {
-      case 0:
-      case 1:
-        port = HDC0_BASE_PORT;
-        break;
-      case 2:
-      case 3:
-        port = HDC1_BASE_PORT;
-    }
-
-    return port;
+    if ((drive_no >> 1) & 1)
+      return HDC1_BASE_PORT;
+    return HDC0_BASE_PORT;
   }
+
   return 0;
 }
 
 /* --- Isso está certo? */
 #define CHS2LBA(c,h,s,nheads,nsectors) (((c)*(nheads)+(h)) * (nsectors) + ((s) - 1))
 
-/* Lê setores usando LBA28. */
-void read_sectors(unsigned char drive_no, 
-                  unsigned long lba,
-                  unsigned char sectors,
-                  void *buffer)   /* Normalizado! */
+/* Lê setores usando LBA28. 
+ * Retorna EAX=0 se ok, caso contrário, erro! */
+int __attribute__((noinline)) read_sectors(unsigned char drive_no, 
+                                           unsigned long lba,
+                                           unsigned char sectors,
+                                           void *buffer)   /* Normalizado! */
 
 {
-  register unsigned short port;
-  register unsigned int buffer_size;
+  unsigned short port;
+  unsigned int buffer_size;
 
-  port = select_hdc(drive_no);
+  if (!(port = select_hdc(drive_no)))
+    return 1;
+
   buffer_size = sectors * 512;
   
   outportb(HDC_DRIVE_HEAD_PORT(port), 
-      inportb(HDC_DRIVE_HEAD_PORT(port)) | 0xe0 | 
-        ((drive_no & 1) << 4) |
-        ((lba >> 24) & 0x0f));
+      inportb(HDC_DRIVE_HEAD_PORT(port)) | 
+        0xe0                             | /* Os 3 bits superiores usam LBA. */
+        ((drive_no & 1) << 4)            | /* Seleciona o HD da controladora. */
+        ((lba >> 24) & 0x0f));             /* Os 4 bits inferiores nos dão a "cabeça". */
 
   outportb(HDC_SECTOR_COUNT_PORT(port), sectors);
-  outportb(HDC_SECTOR_PORT(port), lba & 0xff);
-  outportb(HDC_CYLINDER_LOW_PORT(port), (lba >> 8) & 0xff);
-  outportb(HDC_CYLINDER_HI_PORT(port), (lba >> 16) & 0xff);
+  outportb(HDC_SECTOR_PORT(port), lba);
+  outportb(HDC_CYLINDER_LOW_PORT(port), lba >> 8);
+  outportb(HDC_CYLINDER_HI_PORT(port), lba >> 16);
 
+  /* Envia comando para a controladora. */
   outportb(HDC_COMMAND_PORT(port), HDD_CMD_READRETRY);
+
+  /* Espera até estar pronto. */
   while ((inportb(HDC_STATUS_PORT(port)) & 0x08) == 0);
 
   /* Lê o bloco de dados para o buffer. */
@@ -169,4 +168,6 @@ void read_sectors(unsigned char drive_no,
     : "c" (buffer_size / 2), "d" (HDC_DATA_PORT(port)), "D" (buffer) 
     : "memory"
       );
+
+  return 0;
 }
