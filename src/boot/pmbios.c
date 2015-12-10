@@ -11,9 +11,9 @@
 #define VIDEO_BUFFER_PTR  (void *)0xb8000
 #define SCREEN_WIDTH  80
 #define SCREEN_HEIGHT 25
-#define VIDEO_PTR(x,y) (VIDEO_BUFFER_PTR + ((y) * SCREEN_WIDTH * 2) + (x)*2)
+#define VIDEO_PTR(x,y) (void *)(VIDEO_BUFFER_PTR + ((y) * SCREEN_WIDTH * 2) + (x)*2)
 
-static unsigned char screen_x = 0, screen_y = 1;
+static unsigned char screen_x = 0, screen_y = 1;  /* Deixamos o cursor na linha 1 em mbr.asm. */
 static unsigned char screen_attrib = 7;
 
 void __attribute__((noinline,regparm(2))) gotoxy(unsigned char x, unsigned char y)
@@ -111,11 +111,11 @@ void __attribute__((regparm(1))) _puts(char *s) { for (;*s;s++) putch(*s); }
 #define HDC_COMMAND_PORT(x)       ((x) + 7)
 #define HDC_STATUS_PORT(x)        ((x) + 7)
 
-static unsigned short __attribute__((noinline)) select_hdc(unsigned char drive_no)
+static unsigned short select_hdc(unsigned char drive_no)
 {
   if (drive_no >= 0x80)
   {
-    unsigned short port;
+    register unsigned short port;
 
     switch (drive_no & 3)
     {
@@ -137,14 +137,14 @@ static unsigned short __attribute__((noinline)) select_hdc(unsigned char drive_n
 #define CHS2LBA(c,h,s,nheads,nsectors) (((c)*(nheads)+(h)) * (nsectors) + ((s) - 1))
 
 /* Lê setores usando LBA28. */
-void __attribute__((regparm(3))) read_sectors(unsigned char drive_no, 
-                                              unsigned long lba,
-                                              unsigned char sectors,
-                                              void *buffer)   /* Normalizado! */
+void read_sectors(unsigned char drive_no, 
+                  unsigned long lba,
+                  unsigned char sectors,
+                  void *buffer)   /* Normalizado! */
 
 {
-  unsigned short port;
-  unsigned int buffer_size;
+  register unsigned short port;
+  register unsigned int buffer_size;
 
   port = select_hdc(drive_no);
   buffer_size = sectors * 512;

@@ -1,44 +1,16 @@
 #ifndef __IOPORTS_INCLUDED__
 #define __IOPORTS_INCLUDED__
 
-void inline outportb(unsigned short port, unsigned char data)
-{
-  __asm__ __volatile__ (
-    "outb %%al,%0"
-    : : "dN" (port), "a" (data)
-      );
-}
+#define outportb(port, data) \
+  __asm__ __volatile__ ( "outb %%al,%%dx" : : "d" ((unsigned char)(port)), "a" ((data)) )
 
-void inline outportw(unsigned short port, unsigned short data)
-{
-  __asm__ __volatile__ (
-    "outw %%ax,%0"
-    : : "dN" (port), "a" (data)
-      );
-}
+#define outportw(port, data) \
+  __asm__ __volatile__ ("outw %%ax,%%dx" : : "d" ((unsigned short)(port)), "a" ((data)) )
 
-unsigned char inline inportb(unsigned short port)
-{
-  unsigned char tmp;
+#define inportb(port) \
+  ({ unsigned char tmp; __asm__ __volatile__ ("inb %%dx,%%al" : "=a" (tmp) : "d" ((port))); tmp; })
 
-  __asm__ __volatile__ (
-    "inb %1,%%al"
-     : "=a" (tmp) : "dN" (port)
-  );
+#define inportw(port) \
+  ({ unsigned short tmp; __asm__ __volatile__ ("inb %%dx,%%ax" : "=a" (tmp) : "d" ((port))); tmp; })
 
-  return tmp; 
-}
-
-unsigned short inline inportw(unsigned short port)
-{ 
-  unsigned short tmp;
-
-  __asm__ __volatile__ (
-    "inw %1,%%ax"
-     : "=a" (tmp) : "dN" (port)
-  );
-
-  return tmp; 
-}
-    
 #endif
