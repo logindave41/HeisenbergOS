@@ -12,15 +12,7 @@
 /* Variáveis que mantém o registro da posição x,y na tela. */
 static unsigned char screen_x = 0, screen_y = 1;  /* Deixamos o cursor na linha 1 em mbr.asm. */
 
-void USEREGS gotoxy(unsigned char x, unsigned char y)
-{
-  if (x > SCREEN_WIDTH) x = SCREEN_WIDTH - 1;
-  if (y > SCREEN_HEIGHT) y = SCREEN_HEIGHT - 1;
-  UCHAR_VAR(screen_x) = x;
-  UCHAR_VAR(screen_y) = y;
-}
-
-void NOINLINE scroll_up(void)
+static void scroll_up(void)
 {
   void *srcptr, *destptr;
   unsigned long size;

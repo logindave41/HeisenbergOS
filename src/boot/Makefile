@@ -13,7 +13,7 @@ objectfiles=mbr.o loader.o main.o pmbios.o
 
 .PHONY: clean disasm
 clean:
-	rm *.o
+	-rm *.o
 
 distclean: clean
 	rm ../../bin/mbr.bin

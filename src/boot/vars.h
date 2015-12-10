@@ -16,9 +16,4 @@
 #define INT_VAR(x)    (*(int *)((void *)&(x) + _BASE_OFFSET))
 #define UINT_VAR(x)   (*(unsigned int *)((void *)&(x) + _BASE_OFFSET))
 
-void * __attribute__((regparm(1))) normalize_pointer(void *ptr)
-{
-  return ptr + _BASE_OFFSET;
-}
-
 #endif
