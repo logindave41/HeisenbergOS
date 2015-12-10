@@ -20,9 +20,8 @@ error_enabling_a20_str:
 error_loading_kernel_str:
   db    "Error loading kernel!", 13, 10, 0
 
-section .ldata
 ;--------------------------
-; Estruturas usadas por LGDT, LIDT (e LTR?).
+; Estruturas usadas por LGDT, LIDT.
 ;--------------------------
 gdtptr:
   dw    gdt_end - gdt - 1 ; Tamanho da tabela (aparentemente é necessário esse 
@@ -55,6 +54,9 @@ gdt_end:
 
   ; Movi o TSS para além do segmento .bss.
 
+section .ldata
+  ; Por enquanto não tem nada aqui!
+
 section .btext
 
 ;------------------------
@@ -63,11 +65,11 @@ section .btext
 ;------------------------
 enableA20:
   ; Tenta usar a BIOS (pode ser que isso só funcione no PS/2):
-  mov ax,0x2401
-  int 0x15
-  jnc .testA20       ; Se conseguiu, testa!
+  ;mov ax,0x2401
+  ;int 0x15
+  ;jnc .testA20       ; Se conseguiu, testa!
 
-  ; Se não conseguiu tenta usar o modo "fast".
+  ; Tenta usar o modo "fast".
   in  al,0x92
   or  al,0b00000010
   out 0x92,al
@@ -78,7 +80,7 @@ enableA20:
 ; Testa se o gateA20 foi habilitado.
 ;--------------------------
 .testA20:
-  mov   cx,ds       ; Guarda DS.
+  push ds        ; Guarda DS.
 
   xor   ax,ax
   mov   ds,ax
@@ -108,19 +110,23 @@ enableA20:
   mov   [es:di],bh
   mov   [si],bl
 
-  mov   ds,cx       ; Recupera DS.
+  pop   ds       ; Recupera DS.
   ret
 
 disable_interrupts:
-  in    al,0x70
+  cli
+
+  mov   dx,0x70
+  in    al,dx
   or    al,0b10000000
-  out   0x70,al         ; desabilita NMI
+  out   dx,al         ; desabilita NMI
 
   ;-------
   ; Aproveito para mascarar as interrupções aceitáveis pelo PIC1
-  in    al,0x21
+  mov   dx,0x21
+  in    al,dx
   and   al,0b00000100         ; Exceto a IRQ2!
-  out   0x21,al
+  out   dx,al
 
   ; E também pelo PIC2.
   xor   al,al
@@ -174,8 +180,6 @@ loader:
 ; Prepara o ambiente para entrarmos
 ; no modo protegido. Esse pedaço ainda é prelimiar!
 ;------------------------
-  cli
-
   ; Cria TSS.
   call  create_tss
 
@@ -222,7 +226,7 @@ bits 32
 
 protected_mode_entry:
   ; ajusta os seletores: DS=ES=FS=GS=SS=DATA32SEG
-  mov   eax,_DATA32SEG
+  mov   ax,_DATA32SEG
   mov   ds,ax
   mov   es,ax
   mov   fs,ax
@@ -232,8 +236,8 @@ protected_mode_entry:
                         ; memória inferior! Voltei a colocar ESP em 0x9bffc!
 
   ; main() retorna, depois de fazer tudo o que tem que fazer...
-  call  main
-  or    eax,eax
+  call  _PTR(main)
+  test  eax,eax
   jz    .run_kernel
 
   mov   eax,_PTR(error_loading_kernel_str)

@@ -50,7 +50,7 @@ section .btext
 extern _loader_start
 extern _end
 extern loader
-extern _cksum
+;extern _cksum
 extern _bss_start
 extern _bss_end
 
@@ -70,8 +70,9 @@ _start:
 boot_start:
   ; Ajusta o seletor DS.
   ; Faço DS ser o mesmo que CS para facilitar o acesso aos dados.
-  mov   ax,cs
-  mov   ds,ax
+  ; Usa a pilha da BIOS!
+  push  cs
+  pop   ds
 
   ; É interessante inicializar uma pilha aqui porque
   ; não sabemos onde a pilha da BIOS está. Coloquei a nossa
@@ -100,16 +101,17 @@ boot_start:
 ;----------------------------
   cld                           ; Certifica-se que SI ou DI sejam incrementados.
                                 ; nas instruções de bloco.
-  mov   ax,_MBRSEG
-  mov   es,ax
-  xor   esi,esi
-  mov   edi,esi
-  mov   ecx,128
+  push  _MBRSEG
+  pop   es
+  xor   si,si
+  mov   di,si
+  mov   cx,128
   rep   movsd
   jmp   _MBRSEG:mbr_real_start  ; Salta para a nova cópia.
 
 mbr_real_start:
-  mov   ds,ax       ; Ajusta DS.
+  push  es
+  pop   ds       ; Ajusta DS.
 
   ; Armazena o drive informado pela BIOS.
   mov   [drive_no],dl
@@ -132,8 +134,6 @@ mbr_real_start:
 
   ; Usa a BIOS para carregar o loader...
   ; É necessário adequar o valor de CX em conformidade com INT 0x13/AH=2.
-  mov   ax,ds
-  mov   es,ax                       ; Ajusta ES.
   mov   bx,_loader_start
   call  chs_cylinder_sector_encode
   mov   al,[num_sectors_after_mbr]

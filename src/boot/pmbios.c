@@ -1,6 +1,7 @@
 /* Rotinas de vídeo da nossa "BIOS". */
 #include <ioports.h>
 #include <memory.h>
+#include "defines.h"
 #include "vars.h"
 
 /*********************
@@ -16,7 +17,7 @@
 static unsigned char screen_x = 0, screen_y = 1;  /* Deixamos o cursor na linha 1 em mbr.asm. */
 static unsigned char screen_attrib = 7;
 
-void __attribute__((noinline,regparm(2))) gotoxy(unsigned char x, unsigned char y)
+void USEREGS gotoxy(unsigned char x, unsigned char y)
 {
   if (x > SCREEN_WIDTH) x = SCREEN_WIDTH - 1;
   if (y > SCREEN_HEIGHT) y = SCREEN_HEIGHT - 1;
@@ -24,7 +25,7 @@ void __attribute__((noinline,regparm(2))) gotoxy(unsigned char x, unsigned char 
   UCHAR_VAR(screen_y) = y;
 }
 
-void __attribute__((noinline)) scroll_up(void)
+void NOINLINE scroll_up(void)
 {
   void *srcptr, *destptr;
 
@@ -35,17 +36,17 @@ void __attribute__((noinline)) scroll_up(void)
 
 /* Não são necessarias para o boot! */
 #if 0
-void __attribute__((regparm(1))) settext_attribute(unsigned char attrib)
+void USEREGS settext_attribute(unsigned char attrib)
 {
   UCHAR_VAR(screen_attrib) = attrib;
 }
 
-unsigned char __attribute__((noinline)) gettext_attribute(void)
+unsigned char NOINLINE gettext_attribute(void)
 {
   return UCHAR_VAR(screen_attrib);
 }
 
-void __attribute__((noinline)) clearscreen(void)
+void NOINLINE clearscreen(void)
 {
   memsetw(VIDEO_BUFFER_PTR, 
           ((unsigned short)UCHAR_VAR(screen_attrib) << 8) | ' ', 
@@ -54,7 +55,7 @@ void __attribute__((noinline)) clearscreen(void)
 }
 #endif
 
-void __attribute__((noinline,regparm(1))) putch(unsigned char c)
+void USEREGS putch(unsigned char c)
 {
   unsigned char sx, sy;
 
@@ -89,7 +90,7 @@ void __attribute__((noinline,regparm(1))) putch(unsigned char c)
   UCHAR_VAR(screen_y) = sy;
 }
 
-void __attribute__((noinline, regparm(1))) _puts(char *s) { for (;*s;s++) putch(*s); }
+void USEREGS _puts(char *s) { for (;*s;s++) putch(*s); }
 
 /******************************************** 
  * Função para leitura de setores do disco.
@@ -111,7 +112,7 @@ void __attribute__((noinline, regparm(1))) _puts(char *s) { for (;*s;s++) putch(
 #define HDC_COMMAND_PORT(x)       ((x) + 7)
 #define HDC_STATUS_PORT(x)        ((x) + 7)
 
-static unsigned short select_hdc(unsigned char drive_no)
+static unsigned short USEREGS select_hdc(unsigned char drive_no)
 {
   if (drive_no >= 0x80)
   {
@@ -130,7 +131,7 @@ static unsigned short select_hdc(unsigned char drive_no)
 
 /* Lê setores usando LBA28. 
  * Retorna EAX=0 se ok, caso contrário, erro! */
-int __attribute__((noinline)) read_sectors(unsigned char drive_no, 
+int NOINLINE read_sectors(unsigned char drive_no, 
                                            unsigned long lba,
                                            unsigned char sectors,
                                            void *buffer)   /* Normalizado! */
