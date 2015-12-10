@@ -103,43 +103,24 @@ enableA20:
 
   ; Se gateA20 estiver ligdo, 0x0000:0x0510 contém 0,
   ; senão, conterá 0xff.
-  cmp   byte [si],0
+  mov   al,byte [si]
+  test  al,al
   ; Neste ponto ZF=1 se gateA20 estiver funcionando!
 
   ; Recupera os valores originais.
   mov   [es:di],bh
   mov   [si],bl
 
-  pop   ds       ; Recupera DS.
-  ret
+  jz    .ok
 
-disable_interrupts:
-  cli
-
-  mov   dx,0x70
-  in    al,dx
-  or    al,0b10000000
-  out   dx,al         ; desabilita NMI
-
-  ;-------
-  ; Aproveito para mascarar as interrupções aceitáveis pelo PIC1
-  mov   dx,0x21
-  in    al,dx
-  and   al,0b00000100         ; Exceto a IRQ2!
-  out   dx,al
-
-  ; E também pelo PIC2.
-  xor   al,al
-  out   0xa1,al
-  ret
-
-error_enabling_a20:
   ; Erro ao testar o gate A20...
   mov   si,error_enabling_a20_str
   call  puts
   jmp   halt
 
-create_tss:
+.ok:
+  pop   ds       ; Recupera DS.
+
   ;-------
   ; Cria TSS no final da imagem
   ;-------
@@ -156,6 +137,29 @@ create_tss:
   dec   al
   mov   cl,32
   rep   stosb
+
+  ;---------------
+  ; Desabilita as interrupções...
+  ;---------------
+disable_interrupts:
+  cli
+
+  mov   dx,0x70
+  in    al,dx
+  or    al,0b10000000
+  out   dx,al         ; desabilita NMI
+
+  ; Aproveito para mascarar as interrupções aceitáveis pelo PIC1
+  mov   dx,0x21
+  in    al,dx
+  and   al,0b00000100         ; Exceto a IRQ2!
+  out   dx,al
+
+  ; E também pelo PIC2.
+  xor   al,al
+  out   0xa1,al
+
+  ; OBS: Não guardei o estado anterior pq o kernel rehabilitará as IRQs e a NMI...
   ret
 
 ;=====================
@@ -172,27 +176,10 @@ global loader
 loader:
   call  enableA20
 
-  jnz   error_enabling_a20            ; Se o teste foi ok, salta para a rotina
-                                      ; que coloca o processador em modo 
-                                      ; protegido.
-
 ;------------------------
 ; Prepara o ambiente para entrarmos
 ; no modo protegido. Esse pedaço ainda é prelimiar!
 ;------------------------
-  ; Cria TSS.
-  call  create_tss
-
-  ;-------
-  ; Saltar para o modo protegido é um passo crítico. NENHUMA interrupção pode 
-  ; acontecer. Daí temos que desabilitar a NMI.
-  ;-------
-  call  disable_interrupts
-
-  ; Note que não guardei as máscaras anteriores. Só vamos configurar as
-  ; IRQs de novo no código do kernel.
-  ;--------
-
   ; Agora podemos carregar os registradores das tabelas de descritores
   ; e o task register.
   lgdt  [gdtptr]
