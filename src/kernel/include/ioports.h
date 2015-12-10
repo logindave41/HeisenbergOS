@@ -12,7 +12,7 @@ void inline outb(unsigned short port, unsigned char data)
 void inline outw(unsigned short port, unsigned short data)
 {
   __asm__ __volatile__ (
-    "outw %%al,%0"
+    "outw %%ax,%0"
     : : "dN" (port), "a" (data)
       );
 }
