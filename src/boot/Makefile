@@ -1,9 +1,9 @@
 # Regra para criação do loader... Crio o mbr.lst para ver o código gerado!
-CFLAGS=-O2 -m32 -I../kernel/include -nostdlib -ffreestanding
+CFLAGS=-Os -m32 -I../kernel/include -nostdlib -ffreestanding -fno-align-functions -fomit-frame-pointer
 objectfiles=mbr.o loader.o main.o pmbios.o
 
 ../../bin/mbr.bin: $(objectfiles)
-	ld -T ./linker.ld $^ -o $@
+	ld -s -T ./linker.ld $^ -o $@
 
 %.o: %.c
 	gcc $(CFLAGS) -c -o $@ $<

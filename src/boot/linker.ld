@@ -19,4 +19,11 @@ SECTIONS {
   _bss_start = .;
   .bss : { *(.bss) }
   _bss_end = .;
+
+  /DISCARD/ : { 
+    *(.comment) 
+    *(.eh_frame) 
+    *(.text.unlikely)
+    *(.text.startup)
+  }
 }
