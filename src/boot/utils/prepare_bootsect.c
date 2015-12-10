@@ -5,7 +5,7 @@
 #include <setjmp.h>
 
 static char *buffer;
-static long signature = 0x0B16B00B5;
+static const signature[8] = "HSENBERG"; /* Sim! 8... o '\0' final não me interessa!. */
 
 char *find_signature(char *, size_t);
 
@@ -83,6 +83,7 @@ int main(int argc, char *argv[])
   *p++ = head;
   *p = sector;
 
+#if 0
   /* Calcula Checksum do bloco do loader */
   p = &buffer[512]; q = buffer + fsz - 2;
   checksum = 0;
@@ -92,6 +93,7 @@ int main(int argc, char *argv[])
   if (checksum >> 16)
     checksum = (checksum + (checksum >> 16)) & 0xffff;
   *(unsigned short *)q = checksum;
+#endif
 
   /* Abre o arquivo, de novo, e escreve o buffer inteiro lá! */
   if ((f = fopen(argv[1], "wb")) == NULL)
@@ -107,6 +109,10 @@ int main(int argc, char *argv[])
     longjmp(jb, 1);
   }
 
+  /* padding... */
+  while (!(fsz % 512))
+    fputc(0, f);
+
   fclose(f);
 
   return 0;
@@ -116,7 +122,7 @@ char *find_signature(char *buffer, size_t size)
 {
   while (size--)
   {
-    if (memcmp(buffer, (void *)&signature, sizeof(unsigned int)) == 0)
+    if (memcmp(buffer, signature, sizeof(signature)) == 0)
       return buffer;
     buffer++;
   }
